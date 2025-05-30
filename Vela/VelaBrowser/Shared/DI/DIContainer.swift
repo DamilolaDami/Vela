@@ -13,7 +13,7 @@ class DIContainer: ObservableObject {
     )
     
     // ViewModels
-    func makeBrowserViewModel() -> BrowserViewModel {
+    @MainActor func makeBrowserViewModel() -> BrowserViewModel {
         BrowserViewModel(
             createTabUseCase: createTabUseCase,
             tabRepository: tabRepository
