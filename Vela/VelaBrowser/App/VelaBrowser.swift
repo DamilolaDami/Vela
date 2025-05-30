@@ -11,11 +11,15 @@ import SwiftData
 
 @main
 struct VelaApp: App {
-  
+    @StateObject private var container = DIContainer.shared
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            BrowserView(viewModel: container.makeBrowserViewModel())
+                .frame(minWidth: 1200, minHeight: 800)
         }
-       
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
+        .modelContainer(PersistenceController.shared.container)
     }
 }

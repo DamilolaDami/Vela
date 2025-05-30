@@ -47,6 +47,7 @@ class BrowserViewModel: ObservableObject {
                 receiveValue: { [weak self] tab in
                     self?.tabs.append(tab)
                     self?.currentTab = tab
+                    print("Done")
                 }
             )
             .store(in: &cancellables)
@@ -77,6 +78,7 @@ class BrowserViewModel: ObservableObject {
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] tabs in
+                    print("\(tabs.count)")
                     self?.tabs = tabs
                     self?.currentTab = tabs.first
                 }

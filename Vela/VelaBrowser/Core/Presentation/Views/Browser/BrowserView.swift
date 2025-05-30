@@ -1,4 +1,3 @@
-
 import SwiftUI
 
 struct BrowserView: View {
@@ -25,7 +24,8 @@ struct BrowserView: View {
                 if let currentTab = viewModel.currentTab {
                     WebViewContainer(tab: currentTab)
                 } else {
-                    StartPageView()
+                    // Pass viewModel to StartPageView
+                    StartPageView(viewModel: viewModel)
                 }
             }
         }

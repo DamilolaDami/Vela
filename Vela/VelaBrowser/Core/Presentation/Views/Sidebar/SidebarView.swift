@@ -14,6 +14,7 @@ struct SidebarView: View {
                 LazyVStack(spacing: 4) {
                     ForEach(viewModel.tabs) { tab in
                         TabRow(
+                            viewModel: viewModel,
                             tab: tab,
                             isSelected: tab.id == viewModel.currentTab?.id,
                             onSelect: { viewModel.selectTab(tab) },

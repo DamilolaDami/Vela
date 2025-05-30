@@ -4,19 +4,22 @@ import Combine
 class DIContainer: ObservableObject {
     static let shared = DIContainer()
     
-    // Repositories
-    lazy var tabRepository: TabRepositoryProtocol = TabRepository()
+    // Factory methods that handle MainActor access
+    @MainActor
+    func makeTabRepository() -> TabRepositoryProtocol {
+        return TabRepository(context: PersistenceController.shared.context.mainContext)
+    }
     
-    // Use Cases
-    lazy var createTabUseCase: CreateTabUseCaseProtocol = CreateTabUseCase(
-        tabRepository: tabRepository
-    )
+    @MainActor
+    func makeCreateTabUseCase() -> CreateTabUseCaseProtocol {
+        return CreateTabUseCase(tabRepository: makeTabRepository())
+    }
     
-    // ViewModels
-    @MainActor func makeBrowserViewModel() -> BrowserViewModel {
-        BrowserViewModel(
-            createTabUseCase: createTabUseCase,
-            tabRepository: tabRepository
+    @MainActor
+    func makeBrowserViewModel() -> BrowserViewModel {
+        return BrowserViewModel(
+            createTabUseCase: makeCreateTabUseCase(),
+            tabRepository: makeTabRepository()
         )
     }
     
