@@ -21,8 +21,8 @@ struct BrowserView: View {
                 BrowserToolbar(viewModel: viewModel)
                 
                 // Web Content
-                if let currentTab = viewModel.currentTab {
-                    WebViewContainer(tab: currentTab)
+                if viewModel.currentTab != nil {
+                    WebViewContainer(viewModel: viewModel)
                 } else {
                     // Pass viewModel to StartPageView
                     StartPageView(viewModel: viewModel)

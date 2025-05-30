@@ -1,10 +1,7 @@
-
 import SwiftUI
 
 struct BrowserToolbar: View {
     @ObservedObject var viewModel: BrowserViewModel
-    @State private var addressText = ""
-    @State private var isEditing = false
     
     var body: some View {
         HStack(spacing: 12) {
@@ -36,9 +33,9 @@ struct BrowserToolbar: View {
             
             // Address bar
             AddressBar(
-                text: $addressText,
-                isEditing: $isEditing,
-                onCommit: navigateToURL,
+                text: $viewModel.addressText, // Bind to viewModel
+                isEditing: $viewModel.isEditing, // Bind to viewModel
+                onCommit: viewModel.navigateToURL, // Call viewModel method
                 currentURL: viewModel.currentTab?.url
             )
             
@@ -62,12 +59,6 @@ struct BrowserToolbar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Rectangle())
-        .onAppear {
-            updateAddressText()
-        }
-        .onChange(of: viewModel.currentTab?.url) {_, _ in
-            updateAddressText()
-        }
     }
     
     // MARK: - Computed Properties
@@ -103,33 +94,12 @@ struct BrowserToolbar: View {
         }
     }
     
-    private func navigateToURL() {
-        guard !addressText.isEmpty else { return }
-        
-        let urlString = addressText.hasPrefix("http") ? addressText : "https://\(addressText)"
-        if let url = URL(string: urlString) {
-            if viewModel.currentTab != nil {
-                viewModel.currentTab?.url = url
-                //print("\( viewModel.currentTab?.url)")
-            } else {
-                viewModel.createNewTab(with: url)
-            }
-        }
-        isEditing = false
-    }
-    
     private func addBookmark() {
         // TODO: Add/remove bookmark
     }
     
     private func shareURL() {
         // TODO: Share current URL
-    }
-    
-    private func updateAddressText() {
-        if !isEditing {
-            addressText = viewModel.currentTab?.url?.absoluteString ?? ""
-        }
     }
 }
 

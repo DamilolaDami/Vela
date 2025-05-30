@@ -2,21 +2,20 @@ import SwiftUI
 import WebKit
 
 struct WebViewContainer: View {
-    let tab: Tab
-    @State private var webView: WKWebView?
+    @ObservedObject var viewModel: BrowserViewModel
     @State private var isLoading = false
     @State private var estimatedProgress: Double = 0
-    
+
     var body: some View {
         ZStack {
-            WebViewRepresentable(
-                tab: tab,
-                webView: $webView,
-                isLoading: $isLoading,
-                estimatedProgress: $estimatedProgress
-            )
-            
-            // Loading indicator
+            if let currentTab = viewModel.currentTab, let webView = currentTab.webView {
+                WebViewRepresentable(
+                    tab: currentTab,
+                    isLoading: $isLoading,
+                    estimatedProgress: $estimatedProgress
+                )
+            }
+
             if isLoading {
                 VStack {
                     HStack {
@@ -29,8 +28,7 @@ struct WebViewContainer: View {
                     Spacer()
                 }
             }
-            
-            // Progress bar
+
             if estimatedProgress > 0 && estimatedProgress < 1 {
                 VStack {
                     ProgressView(value: estimatedProgress)
@@ -43,17 +41,19 @@ struct WebViewContainer: View {
         .onAppear {
             loadURL()
         }
-        .onChange(of: tab.url) { _ in
+        .onChange(of: viewModel.currentTab) { _, _ in
             loadURL()
         }
     }
-    
+
     private func loadURL() {
-        guard let url = tab.url else { return }
-        
+        guard let currentTab = viewModel.currentTab,
+              let webView = currentTab.webView,
+              let url = currentTab.url else { return }
+
         DispatchQueue.main.async {
             let request = URLRequest(url: url)
-            webView?.load(request)
+            webView.load(request)
         }
     }
 }

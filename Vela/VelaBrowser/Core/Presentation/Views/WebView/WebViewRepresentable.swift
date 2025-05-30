@@ -5,43 +5,48 @@ import WebKit
 // MARK: - WebView Representable
 
 struct WebViewRepresentable: NSViewRepresentable {
-    let tab: Tab
-    @Binding var webView: WKWebView?
+    @ObservedObject var tab: Tab
     @Binding var isLoading: Bool
     @Binding var estimatedProgress: Double
-    
+
     func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView: WKWebView
+        if let existingWebView = tab.webView {
+            webView = existingWebView
+        } else {
+            let configuration = WKWebViewConfiguration()
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+            configuration.preferences.isFraudulentWebsiteWarningEnabled = false
+            configuration.applicationNameForUserAgent = "Safari/605.1.15"
+
+            webView = WKWebView(frame: .zero, configuration: configuration)
+            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            tab.webView = webView
+        }
+
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
-        
-        // Enable developer extras for debugging
+
         #if DEBUG
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         #endif
-        
-        // Set up observers
+
         webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.isLoading), options: .new, context: nil)
         webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.estimatedProgress), options: .new, context: nil)
         webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.title), options: .new, context: nil)
         webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.url), options: .new, context: nil)
-        
-        DispatchQueue.main.async {
-            self.webView = webView
-        }
-        
+
         return webView
     }
-    
+
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        // Update handled in coordinator
+        if let url = tab.url, nsView.url != url {
+            nsView.load(URLRequest(url: url))
+        }
     }
-    
+
     func makeCoordinator() -> WebViewCoordinator {
-        WebViewCoordinator(self)
+        WebViewCoordinator(self, tab: tab)
     }
 }
-

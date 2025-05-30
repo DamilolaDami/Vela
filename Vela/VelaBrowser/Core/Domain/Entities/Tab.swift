@@ -1,11 +1,12 @@
 
 import Foundation
 import Combine
+import WebKit
 
-struct Tab: Identifiable, Equatable {
+class Tab: Identifiable, Equatable, ObservableObject {
     let id: UUID
     var title: String
-    var url: URL?
+    @Published var url: URL?
     var favicon: Data?
     var isLoading: Bool = false
     var canGoBack: Bool = false
@@ -16,6 +17,7 @@ struct Tab: Identifiable, Equatable {
     var isPinned: Bool = false
     var position: Int = 0
     var scrollPosition: Double = 0
+    var webView: WKWebView?
     
     init(
         id: UUID = UUID(),
