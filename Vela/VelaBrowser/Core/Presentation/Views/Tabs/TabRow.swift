@@ -7,7 +7,6 @@
 
 import SwiftUI
 
-
 struct TabRow: View {
     @ObservedObject var viewModel: BrowserViewModel
     let tab: Tab
@@ -16,44 +15,41 @@ struct TabRow: View {
     let onClose: () -> Void
     
     @State private var isHovered = false
-    @State private var showCloseButton = false
     
     var body: some View {
         HStack(spacing: 12) {
-            // Favicon or loading indicator
+            // Favicon - simple and clean
             Group {
                 if tab.isLoading {
                     ProgressView()
-                        .scaleEffect(0.6)
+                        .controlSize(.mini)
                         .frame(width: 16, height: 16)
                 } else if let faviconData = tab.favicon,
                           let nsImage = NSImage(data: faviconData) {
                     Image(nsImage: nsImage)
                         .resizable()
                         .frame(width: 16, height: 16)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
                 } else {
                     Image(systemName: "globe")
-                        .font(.system(size: 14))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.secondary)
                         .frame(width: 16, height: 16)
                 }
             }
             
-            // Tab content
-            VStack(alignment: .leading, spacing: 2) {
-                // Title
+            // Tab title and URL - Arc's minimal approach
+            VStack(alignment: .leading, spacing: 1) {
                 Text(tab.title.isEmpty ? "Untitled" : tab.title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(isSelected ? .primary : .secondary)
+                    .foregroundColor(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 
-                // URL
                 if let url = tab.url {
-                    Text(url.host ?? url.absoluteString)
+                    Text(cleanURL(from: url))
                         .font(.system(size: 11))
-                        .foregroundColor(.teal)
+                        .foregroundColor(.blue)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -61,110 +57,85 @@ struct TabRow: View {
             
             Spacer()
             
-            // Close button
-            if showCloseButton || isSelected {
+            // Close button - only show on hover or selection
+            if isHovered {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
-                        .frame(width: 16, height: 16)
-                        .background(
-                            Circle()
-                                .fill(.quaternary)
-                                .opacity(isHovered ? 1 : 0)
-                        )
+                        .frame(width: 20, height: 20)
+                        .background(Color.black.opacity(0.05))
+                        .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .opacity(showCloseButton ? 1 : 0.7)
-                .animation(.easeInOut(duration: 0.2), value: showCloseButton)
+                .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(tabBackgroundColor)
-                .opacity(backgroundOpacity)
+            Rectangle()
+                .fill(isSelected ? Color.white : Color.clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(selectionBorderColor, lineWidth: 1)
-                .opacity(isSelected ? 1 : 0)
+            // Arc's signature left border for selected tab
+            Rectangle()
+                .fill(viewModel.currentSpace?.color.color ?? .blue)
+                .frame(width: 3)
+                .opacity(isSelected ? 1 : 0),
+            alignment: .leading
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
-                showCloseButton = hovering
             }
         }
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isHovered)
         .contextMenu {
             TabContextMenu(tab: tab, onClose: onClose)
         }
     }
     
-    private var tabBackgroundColor: Color {
-        if isSelected {
-            return .primary
-        } else if isHovered {
-            return .secondary
-        } else {
-            return .clear
+    private func cleanURL(from url: URL) -> String {
+        if let host = url.host {
+            return host.replacingOccurrences(of: "www.", with: "")
         }
-    }
-    
-    private var backgroundOpacity: Double {
-        if isSelected {
-            return 0.1
-        } else if isHovered {
-            return 0.05
-        } else {
-            return 0
-        }
-    }
-    
-    private var selectionBorderColor: Color {
-        viewModel.currentSpace?.color.color ?? .blue
+        return url.absoluteString
     }
 }
 
-// MARK: - TabContextMenu.swift
-import SwiftUI
+// MARK: - TabContextMenu
 
 struct TabContextMenu: View {
     let tab: Tab
     let onClose: () -> Void
     
     var body: some View {
-        Group {
-            Button("Reload") {
-                // TODO: Reload tab
-            }
-            
-            Button("Duplicate") {
-                // TODO: Duplicate tab
-            }
-            
-            Divider()
-            
-            Button("Move to New Space") {
-                // TODO: Move to new space
-            }
-            
-            Button("Pin Tab") {
-                // TODO: Pin tab
-            }
-            
-            Divider()
-            
-            Button("Close Tab", action: onClose)
-            
-            Button("Close Other Tabs") {
-                // TODO: Close other tabs
-            }
+        Button("Reload") {
+            // TODO: Reload tab
+        }
+        
+        Button("Duplicate") {
+            // TODO: Duplicate tab
+        }
+        
+        Divider()
+        
+        Button("Move to New Space") {
+            // TODO: Move to new space
+        }
+        
+        Button("Pin Tab") {
+            // TODO: Pin tab
+        }
+        
+        Divider()
+        
+        Button("Close Tab", action: onClose)
+        
+        Button("Close Other Tabs") {
+            // TODO: Close other tabs
         }
     }
 }
