@@ -58,5 +58,7 @@ struct BrowserView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
+        .browserKeyboardShortcuts(viewModel: viewModel)
+        .focusable()
     }
 }

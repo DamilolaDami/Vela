@@ -70,42 +70,51 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
 
     // MARK: - KVO (unchanged)
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        guard let webView = object as? WKWebView,
-              webView == self.webView,
-              let parent = self.parent,
-              parent.tab.id == self.tabId else { return }
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self,
+            guard let webView = object as? WKWebView,
+                  webView == self.webView,
                   let parent = self.parent,
                   parent.tab.id == self.tabId else { return }
-            
-            let tab = parent.tab
-            
-            switch keyPath {
-            case #keyPath(WKWebView.isLoading):
-                let loading = webView.isLoading
-                tab.isLoading = loading
-                parent.isLoading = loading
-            case #keyPath(WKWebView.estimatedProgress):
-                parent.estimatedProgress = webView.estimatedProgress
-            case #keyPath(WKWebView.title):
-                if let newTitle = webView.title, !newTitle.isEmpty, tab.title != newTitle {
-                    tab.title = newTitle
-                } else if webView.title?.isEmpty == true || webView.title == nil {
-                    tab.title = "Untitled"
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self,
+                      let parent = self.parent,
+                      parent.tab.id == self.tabId else { return }
+                
+                let tab = parent.tab
+                var tabUpdated = false // Track if tab was modified
+                
+                switch keyPath {
+                case #keyPath(WKWebView.isLoading):
+                    let loading = webView.isLoading
+                    tab.isLoading = loading
+                    parent.isLoading = loading
+                    tabUpdated = true
+                case #keyPath(WKWebView.estimatedProgress):
+                    parent.estimatedProgress = webView.estimatedProgress
+                case #keyPath(WKWebView.title):
+                    if let newTitle = webView.title, !newTitle.isEmpty, tab.title != newTitle {
+                        tab.title = newTitle
+                        tabUpdated = true
+                    } else if webView.title?.isEmpty == true || webView.title == nil {
+                        tab.title = "Untitled"
+                        tabUpdated = true
+                    }
+                case #keyPath(WKWebView.url):
+                    if let newURL = webView.url, tab.url != newURL {
+                        tab.url = newURL
+                        self.lastRequestedURL = newURL
+                        tabUpdated = true
+                    }
+                default:
+                    break
                 }
-            case #keyPath(WKWebView.url):
-                if let newURL = webView.url, tab.url != newURL {
-                    tab.url = newURL
-                    self.lastRequestedURL = newURL
+                
+                // Notify BrowserViewModel if tab was updated
+                if tabUpdated {
+                    self.browserViewModel?.updateTab(tab)
                 }
-            default:
-                break
             }
         }
-    }
-
     // MARK: - WKNavigationDelegate
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard webView == self.webView,

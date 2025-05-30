@@ -58,7 +58,7 @@ struct TabRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 15)
                 .fill(
                     isSelected ?
                     Color.white :
@@ -72,13 +72,13 @@ struct TabRow: View {
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 15)
                 .stroke(
                     isSelected ? Color.gray.opacity(0.2) : Color.clear,
                     lineWidth: 1
                 )
         )
-        .contentShape(Rectangle())
+        .contentShape(Capsule())
         .contextMenu {
             TabContextMenu(tab: tab, viewModel: viewModel)
         }
@@ -157,6 +157,9 @@ struct TabContextMenu: View {
             
             Button("Close Tab") {
                 viewModel.closeTab(tab)
+            }
+            Button("Close and Delete Tab") {
+                viewModel.closeAndDeleteTab(tab)
             }
             
             Button("Close Other Tabs") {

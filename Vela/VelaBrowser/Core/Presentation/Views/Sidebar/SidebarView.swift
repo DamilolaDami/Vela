@@ -103,19 +103,20 @@ struct TabsSection: View {
             
             // Tab List
             ForEach(viewModel.tabs) { tab in
-                TabRow(
-                    viewModel: viewModel,
-                    tab: tab,
-                    isSelected: tab.id == viewModel.currentTab?.id,
-                    isHovered: hoveredTab == tab.id,
-                    onSelect: { viewModel.selectTab(tab) },
-                    onClose: { viewModel.closeTab(tab) },
-                    onHover: { isHovering in
-                      hoveredTab = isHovering ? tab.id : nil
+                            TabRow(
+                                viewModel: viewModel,
+                                tab: tab,
+                                isSelected: tab.id == viewModel.currentTab?.id,
+                                isHovered: hoveredTab == tab.id,
+                                onSelect: { viewModel.selectTab(tab) },
+                                onClose: { viewModel.closeAndDeleteTab(tab) }, // Use closeAndDeleteTab
+                                onHover: { isHovering in
+                                    hoveredTab = isHovering ? tab.id : nil
+                                }
+                            )
+                        }
                     }
-                )
-            }
-        }
+                    .id(viewModel.currentSpace?.id)
     }
 }
 
