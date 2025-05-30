@@ -37,3 +37,4 @@ struct BrowserView: View {
             }
         }
     }
+}
