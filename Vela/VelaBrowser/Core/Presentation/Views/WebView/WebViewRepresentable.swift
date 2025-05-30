@@ -1,8 +1,5 @@
-
 import SwiftUI
 import WebKit
-
-// MARK: - WebView Representable
 
 struct WebViewRepresentable: NSViewRepresentable {
     @ObservedObject var tab: Tab
@@ -32,17 +29,25 @@ struct WebViewRepresentable: NSViewRepresentable {
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         #endif
 
-        webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.isLoading), options: .new, context: nil)
-        webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.estimatedProgress), options: .new, context: nil)
-        webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.title), options: .new, context: nil)
-        webView.addObserver(context.coordinator, forKeyPath: #keyPath(WKWebView.url), options: .new, context: nil)
+        // Add observers using the safe method
+        context.coordinator.addObservers(to: webView)
 
         return webView
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
+        // Update the coordinator's parent reference
+        context.coordinator.parent = self
+        
+        // Only load if the URL is different and valid
         if let url = tab.url, nsView.url != url {
             nsView.load(URLRequest(url: url))
+        }
+        
+        // Update binding values to match current webview state
+        DispatchQueue.main.async {
+            isLoading = nsView.isLoading
+            estimatedProgress = nsView.estimatedProgress
         }
     }
 
