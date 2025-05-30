@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BCC7E1B12DEA27CE001D9F26 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = BCC7E1B02DEA27CE001D9F26 /* Kingfisher */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		BC4D147A2DE9475A005C3040 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BCC7E1B12DEA27CE001D9F26 /* Kingfisher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +130,7 @@
 			);
 			name = Vela;
 			packageProductDependencies = (
+				BCC7E1B02DEA27CE001D9F26 /* Kingfisher */,
 			);
 			productName = Vela;
 			productReference = BC4D14652DE94757005C3040 /* Vela.app */;
@@ -208,6 +214,9 @@
 			);
 			mainGroup = BC4D145C2DE94757005C3040;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BCC7E1AF2DEA27CE001D9F26 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BC4D14662DE94757005C3040 /* Products */;
 			projectDirPath = "";
@@ -585,6 +594,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BCC7E1AF2DEA27CE001D9F26 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.3.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BCC7E1B02DEA27CE001D9F26 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BCC7E1AF2DEA27CE001D9F26 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BC4D145D2DE94757005C3040 /* Project object */;
 }

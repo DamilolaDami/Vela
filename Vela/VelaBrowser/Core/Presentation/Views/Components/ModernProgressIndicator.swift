@@ -1,8 +1,16 @@
+//
+//  ModernProgressIndicator.swift
+//  Vela
+//
+//  Created by damilola on 5/30/25.
+//
+
+
 
 import SwiftUI
 
 // Custom Modern Progress Indicator
-struct ModernProgressIndicator: View {
+struct VelaProgressIndicator: View {
     let progress: Double
     @State private var animatedProgress: Double = 0
     @State private var glowOffset: Double = 0
@@ -27,7 +35,7 @@ struct ModernProgressIndicator: View {
                         endPoint: .trailing
                     )
                 )
-                .frame(width: max(0, animatedProgress * UIScreen.main.bounds.width), height: 3)
+                .frame(width: max(0, animatedProgress * 150), height: 3)
                 .overlay(
                     // Shimmer effect
                     Rectangle()
@@ -59,10 +67,10 @@ struct ModernProgressIndicator: View {
             }
             // Start shimmer animation
             withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                glowOffset = UIScreen.main.bounds.width
+                glowOffset = 150
             }
         }
-        .onChange(of: progress) { newProgress in
+        .onChange(of: progress) {_, newProgress in
             withAnimation(.easeInOut(duration: 0.2)) {
                 animatedProgress = newProgress
             }

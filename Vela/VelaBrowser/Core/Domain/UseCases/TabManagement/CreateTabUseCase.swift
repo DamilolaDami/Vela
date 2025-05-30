@@ -1,4 +1,3 @@
-
 import Foundation
 import Combine
 
@@ -8,18 +7,39 @@ protocol CreateTabUseCaseProtocol {
 
 class CreateTabUseCase: CreateTabUseCaseProtocol {
     private let tabRepository: TabRepositoryProtocol
+    private let spaceRepository: SpaceRepositoryProtocol // Add SpaceRepository to access default space
     
-    init(tabRepository: TabRepositoryProtocol) {
+    init(tabRepository: TabRepositoryProtocol, spaceRepository: SpaceRepositoryProtocol) {
         self.tabRepository = tabRepository
+        self.spaceRepository = spaceRepository
     }
     
     func execute(url: URL?, in spaceId: UUID?) -> AnyPublisher<Tab, Error> {
-        let newTab = Tab(
-            title: url?.host ?? "New Tab",
-            url: url,
-            spaceId: spaceId
-        )
+        // If no spaceId is provided, fetch the default space's ID
+        let spaceIdPublisher: AnyPublisher<UUID?, Error> = spaceId != nil ?
+            Just(spaceId).setFailureType(to: Error.self).eraseToAnyPublisher() :
+            spaceRepository.getAllSpaces()
+                .map { spaces in
+                    spaces.first(where: { $0.isDefault })?.id
+                }
+                .eraseToAnyPublisher()
         
-        return tabRepository.create(tab: newTab)
+        return spaceIdPublisher
+            .flatMap { [weak self] resolvedSpaceId -> AnyPublisher<Tab, Error> in
+                guard let self else {
+                    return Fail(error: RepositoryError.unknown).eraseToAnyPublisher()
+                }
+                
+                let newTab = Tab(
+                    title: url?.host ?? "New Tab",
+                    url: url,
+                    spaceId: resolvedSpaceId,
+                    createdAt: Date(),
+                    lastAccessedAt: Date()
+                )
+                
+                return self.tabRepository.create(tab: newTab)
+            }
+            .eraseToAnyPublisher()
     }
 }

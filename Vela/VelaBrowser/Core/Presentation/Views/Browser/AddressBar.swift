@@ -224,4 +224,4 @@ struct AddressBar: View {
     }
 }
 
-// MARK: - Search Suggestion Model
+

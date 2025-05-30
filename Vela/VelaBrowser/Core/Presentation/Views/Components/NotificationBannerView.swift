@@ -1,3 +1,12 @@
+//
+//  NotificationBannerView.swift
+//  Vela
+//
+//  Created by damilola on 5/30/25.
+//
+
+import SwiftUI
+
 struct NotificationBannerView: View {
     let banner: NotificationBanner
     let onDismiss: () -> Void
@@ -57,20 +66,20 @@ struct NotificationBannerView: View {
                 opacity = 1
             }
         }
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.y < -50 {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            offset = -100
-                            opacity = 0
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            onDismiss()
-                        }
-                    }
-                }
-        )
+//        .gesture(
+////            DragGesture()
+////                .onEnded { value in
+////                    if value.translation. < -50 {
+////                        withAnimation(.easeInOut(duration: 0.3)) {
+////                            offset = -100
+////                            opacity = 0
+////                        }
+////                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+////                            onDismiss()
+////                        }
+////                    }
+////                }
+//        )
     }
 }
 

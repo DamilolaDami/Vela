@@ -3,57 +3,46 @@ import WebKit
 
 struct WebViewContainer: View {
     @ObservedObject var viewModel: BrowserViewModel
-    @State private var isLoading = false
-    @State private var estimatedProgress: Double = 0
+    @State private var hasInitialLoad = false
 
     var body: some View {
         ZStack {
             if let currentTab = viewModel.currentTab, let webView = currentTab.webView {
                 WebViewRepresentable(
                     tab: currentTab,
-                    isLoading: $isLoading,
-                    estimatedProgress: $estimatedProgress
+                    isLoading: $viewModel.isWebsiteLoading,
+                    estimatedProgress: $viewModel.estimatedProgress,
+                    browserViewModel: viewModel
                 )
-            }
-
-            if isLoading {
-                VStack {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .padding(.trailing, 16)
-                            .padding(.top, 8)
-                    }
-                    Spacer()
-                }
-            }
-
-            if estimatedProgress > 0 && estimatedProgress < 1 {
-                VStack {
-                    ProgressView(value: estimatedProgress)
-                        .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
-                        .scaleEffect(x: 1, y: 0.5)
-                    Spacer()
-                }
+                .id(currentTab.id)
             }
         }
         .onAppear {
-            loadURL()
+            if !hasInitialLoad {
+                loadInitialURL()
+                hasInitialLoad = true
+            }
         }
-        .onChange(of: viewModel.currentTab) { _, _ in
-            loadURL()
+        .onChange(of: viewModel.currentTab?.id) { _, _ in
+            hasInitialLoad = false
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                loadInitialURL()
+                hasInitialLoad = true
+            }
         }
     }
 
-    private func loadURL() {
+    private func loadInitialURL() {
         guard let currentTab = viewModel.currentTab,
               let webView = currentTab.webView,
               let url = currentTab.url else { return }
 
-        DispatchQueue.main.async {
-            let request = URLRequest(url: url)
-            webView.load(request)
+        if webView.url != url {
+            DispatchQueue.main.async {
+                let request = URLRequest(url: url)
+                webView.load(request)
+            }
         }
     }
 }

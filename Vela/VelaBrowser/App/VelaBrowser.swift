@@ -16,7 +16,9 @@ struct VelaApp: App {
     var body: some Scene {
         WindowGroup {
             BrowserView(viewModel: container.makeBrowserViewModel())
-                .frame(minWidth: 1200, minHeight: 800)
+                .withNotificationBanners()
+                .frame(minWidth: 1200, minHeight: 700)
+                
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified(showsTitle: false))

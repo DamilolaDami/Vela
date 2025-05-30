@@ -1,7 +1,7 @@
 
 import Foundation
 
-struct Space: Identifiable, Equatable {
+class Space: Identifiable, Equatable {
     let id: UUID
     var name: String
     var color: SpaceColor
@@ -30,5 +30,15 @@ struct Space: Identifiable, Equatable {
     
     enum SpaceColor: String, CaseIterable {
         case blue, purple, pink, red, orange, yellow, green, gray
+    }
+    
+    static func == (lhs: Space, rhs: Space) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.name == rhs.name &&
+               lhs.color == rhs.color &&
+               lhs.tabs == rhs.tabs &&
+               lhs.createdAt == rhs.createdAt &&
+               lhs.position == rhs.position &&
+               lhs.isDefault == rhs.isDefault
     }
 }

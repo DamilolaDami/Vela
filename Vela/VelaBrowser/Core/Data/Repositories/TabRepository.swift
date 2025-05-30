@@ -2,11 +2,9 @@ import Foundation
 import Combine
 import SwiftData
 
-
 class TabRepository: TabRepositoryProtocol {
     private let context: ModelContext
     
-   
     init(context: ModelContext) {
         self.context = context
     }
@@ -18,12 +16,48 @@ class TabRepository: TabRepositoryProtocol {
                 return
             }
             
-            let tabEntity = TabEntity(from: tab)
-            self.context.insert(tabEntity)
-            
             do {
+                // Create TabEntity
+                let tabEntity = TabEntity(from: tab)
+                
+                // Handle spaceId: use provided spaceId or fall back to default space
+                let spaceId = tab.spaceId ?? {
+                    let fetchDescriptor = FetchDescriptor<SpaceEntity>(
+                        predicate: #Predicate { $0.isDefault == true }
+                    )
+                    if let defaultSpace = try? self.context.fetch(fetchDescriptor).first {
+                        return defaultSpace.id
+                    }
+                    return nil
+                }()
+                
+                // Set the space relationship if spaceId is available
+                if let spaceId {
+                    let fetchDescriptor = FetchDescriptor<SpaceEntity>(
+                        predicate: #Predicate { $0.id == spaceId }
+                    )
+                    let spaceEntities = try self.context.fetch(fetchDescriptor)
+                    guard let spaceEntity = spaceEntities.first else {
+                        promise(.failure(RepositoryError.notFound))
+                        return
+                    }
+                    
+                    tabEntity.space = spaceEntity
+                    var updatedTabs = spaceEntity.tabs ?? []
+                    updatedTabs.append(tabEntity)
+                    spaceEntity.tabs = updatedTabs
+                }
+                
+                // Insert and save
+                self.context.insert(tabEntity)
                 try self.context.save()
-                promise(.success(tab))
+                
+                guard let createdTab = tabEntity.toTab() else {
+                    promise(.failure(RepositoryError.invalidData))
+                    return
+                }
+                
+                promise(.success(createdTab))
             } catch {
                 promise(.failure(error))
             }
@@ -60,7 +94,7 @@ class TabRepository: TabRepositoryProtocol {
             }
             
             do {
-                let predicate = #Predicate<TabEntity> { $0.spaceId == spaceId }
+                let predicate = #Predicate<TabEntity> { $0.spaceId == spaceId || $0.space?.id == spaceId }
                 let descriptor = FetchDescriptor<TabEntity>(
                     predicate: predicate,
                     sortBy: [SortDescriptor(\.lastAccessedAt, order: .reverse)]
@@ -83,11 +117,8 @@ class TabRepository: TabRepositoryProtocol {
             }
             
             do {
-                // Store the tab.id in a local variable to avoid capture issues
                 let tabId = tab.id
-                let predicate = #Predicate<TabEntity> { entity in
-                    entity.id == tabId
-                }
+                let predicate = #Predicate<TabEntity> { $0.id == tabId }
                 let descriptor = FetchDescriptor<TabEntity>(predicate: predicate)
                 let entities = try self.context.fetch(descriptor)
                 
@@ -123,6 +154,10 @@ class TabRepository: TabRepositoryProtocol {
                     return
                 }
                 
+                if let space = entity.space {
+                    space.tabs = space.tabs?.filter { $0.id != tabId }
+                }
+                
                 self.context.delete(entity)
                 try self.context.save()
                 promise(.success(()))
@@ -133,6 +168,7 @@ class TabRepository: TabRepositoryProtocol {
         .eraseToAnyPublisher()
     }
 }
+
 enum RepositoryError: Error {
     case notFound
     case unknown

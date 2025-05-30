@@ -7,135 +7,165 @@
 
 import SwiftUI
 
+// MARK: - Enhanced Tab Row
 struct TabRow: View {
     @ObservedObject var viewModel: BrowserViewModel
     let tab: Tab
     let isSelected: Bool
+    let isHovered: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
-    
-    @State private var isHovered = false
+    let onHover: (Bool) -> Void
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Favicon - simple and clean
-            Group {
-                if tab.isLoading {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .frame(width: 16, height: 16)
-                } else if let faviconData = tab.favicon,
-                          let nsImage = NSImage(data: faviconData) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .frame(width: 16, height: 16)
-                        .clipShape(RoundedRectangle(cornerRadius: 2))
-                } else {
-                    Image(systemName: "globe")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .frame(width: 16, height: 16)
-                }
-            }
+        HStack(spacing: 8) {
+            // Favicon or default icon
+            TabIcon(tab: tab)
             
-            // Tab title and URL - Arc's minimal approach
+            // Title
             VStack(alignment: .leading, spacing: 1) {
-                Text(tab.title.isEmpty ? "Untitled" : tab.title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
+                Text(tab.title)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundColor(isSelected ? .primary : .secondary)
                     .lineLimit(1)
-                    .truncationMode(.tail)
                 
                 if let url = tab.url {
-                    Text(cleanURL(from: url))
-                        .font(.system(size: 11))
-                        .foregroundColor(.blue)
+                    Text(url.host ?? "")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
                         .lineLimit(1)
-                        .truncationMode(.middle)
                 }
             }
             
             Spacer()
             
-            // Close button - only show on hover or selection
-            if isHovered {
+            // Close button (shown on hover or selection)
+            if isHovered || isSelected {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
-                        .frame(width: 20, height: 20)
-                        .background(Color.black.opacity(0.05))
-                        .clipShape(Circle())
+                        .frame(width: 16, height: 16)
+                        .background(
+                            Circle()
+                                .fill(Color(NSColor.separatorColor).opacity(0.3))
+                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PlainButtonStyle())
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(
-            Rectangle()
-                .fill(isSelected ? Color.white : Color.clear)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    isSelected ?
+                    Color.white :
+                    Color(NSColor.controlBackgroundColor).opacity(isHovered ? 1.0 : 0)
+                )
+                .shadow(
+                    color: isSelected ? Color.black.opacity(0.1) : Color.clear,
+                    radius: isSelected ? 4 : 0,
+                    x: 0,
+                    y: isSelected ? 2 : 0
+                )
         )
         .overlay(
-            // Arc's signature left border for selected tab
-            Rectangle()
-                .fill(viewModel.currentSpace?.color.color ?? .blue)
-                .frame(width: 3)
-                .opacity(isSelected ? 1 : 0),
-            alignment: .leading
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(
+                    isSelected ? Color.gray.opacity(0.2) : Color.clear,
+                    lineWidth: 1
+                )
         )
         .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
+        .contextMenu {
+            TabContextMenu(tab: tab, viewModel: viewModel)
+        }
+        .onTapGesture {
+            onSelect()
+        }
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.2)) {
+                onHover(hovering)
             }
         }
-        .contextMenu {
-            TabContextMenu(tab: tab, onClose: onClose)
-        }
-    }
-    
-    private func cleanURL(from url: URL) -> String {
-        if let host = url.host {
-            return host.replacingOccurrences(of: "www.", with: "")
-        }
-        return url.absoluteString
     }
 }
 
-// MARK: - TabContextMenu
-
-struct TabContextMenu: View {
+struct TabIcon: View {
     let tab: Tab
-    let onClose: () -> Void
     
     var body: some View {
-        Button("Reload") {
-            // TODO: Reload tab
+        ZStack {
+            Circle()
+                .fill(Color(NSColor.quaternaryLabelColor))
+                .frame(width: 20, height: 20)
+            
+            // Use favicon if available, otherwise show default icon
+            Group {
+                if tab.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else if let faviconData = tab.favicon,
+                          let nsImage = NSImage(data: faviconData) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .shadow(color: Color(NSColor.shadowColor).opacity(0.2), radius: 1, x: 0, y: 0.5)
+                } else {
+                    Image(systemName: "globe")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 16, height: 16)
+                }
+            }
         }
-        
-        Button("Duplicate") {
-            // TODO: Duplicate tab
-        }
-        
-        Divider()
-        
-        Button("Move to New Space") {
-            // TODO: Move to new space
-        }
-        
-        Button("Pin Tab") {
-            // TODO: Pin tab
-        }
-        
-        Divider()
-        
-        Button("Close Tab", action: onClose)
-        
-        Button("Close Other Tabs") {
-            // TODO: Close other tabs
+    }
+}
+
+
+
+// MARK: - Tab Context Menu
+struct TabContextMenu: View {
+    let tab: Tab
+    @ObservedObject var viewModel: BrowserViewModel
+    
+    var body: some View {
+        Group {
+            Button("Reload Tab") {
+                viewModel.reloadTab(tab)
+            }
+            
+            Button("Duplicate Tab") {
+                viewModel.duplicateTab(tab)
+            }
+            
+            Divider()
+            
+            Button("Pin Tab") {
+                viewModel.pinTab(tab)
+            }
+            
+            Button("Mute Tab") {
+                viewModel.muteTab(tab)
+            }
+            
+            Divider()
+            
+            Button("Close Tab") {
+                viewModel.closeTab(tab)
+            }
+            
+            Button("Close Other Tabs") {
+                viewModel.closeOtherTabs(except: tab)
+            }
+            
+            Button("Close Tabs to the Right") {
+                viewModel.closeTabsToRight(of: tab)
+            }
         }
     }
 }

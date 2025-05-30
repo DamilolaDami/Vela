@@ -58,7 +58,7 @@ struct SpaceCreationSheet: View {
     
     private func createSpace() {
         let newSpace = Space(name: spaceName, color: selectedColor)
-        //viewModel.createSpace(newSpace)
+        viewModel.createSpace(newSpace)
         dismiss()
     }
 }

@@ -1,3 +1,13 @@
+//
+//  NotificationService.swift
+//  Vela
+//
+//  Created by damilola on 5/30/25.
+//
+
+import Foundation
+
+
 class NotificationService: ObservableObject {
     static let shared = NotificationService()
     

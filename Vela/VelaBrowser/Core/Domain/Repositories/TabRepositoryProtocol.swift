@@ -2,6 +2,7 @@
 import Foundation
 import Combine
 
+
 protocol TabRepositoryProtocol {
     func create(tab: Tab) -> AnyPublisher<Tab, Error>
     func getAll() -> AnyPublisher<[Tab], Error>
