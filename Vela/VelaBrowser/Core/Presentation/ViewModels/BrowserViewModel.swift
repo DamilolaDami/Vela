@@ -20,6 +20,13 @@ class BrowserViewModel: ObservableObject {
     @Published var isShowingSpaceInfoPopover = false
     @Published var spaceForInfoPopover: Space? = nil
     @Published var columnVisibility = NavigationSplitViewVisibility.all
+    @Published var isFullScreen: Bool = false
+    @Published var isAdBlockingEnabled: Bool = false
+    @Published var isJavaScriptEnabled: Bool = true
+    @Published var isPopupBlockingEnabled: Bool = true
+    @Published var isIncognitoMode: Bool = false
+    
+    var adBlockRuleList: WKContentRuleList?
     
     private let createTabUseCase: CreateTabUseCaseProtocol
     private let tabRepository: TabRepositoryProtocol
@@ -28,6 +35,10 @@ class BrowserViewModel: ObservableObject {
     
     private enum UserDefaultsKeys {
         static let lastSelectedSpaceId = "lastSelectedSpaceId"
+    }
+    
+    var spaceColor: Color {
+        currentSpace?.color.color ??  Color(NSColor.tertiarySystemFill)
     }
     
     init(
@@ -562,6 +573,110 @@ class BrowserViewModel: ObservableObject {
     
     func muteTab(_ tab: Tab) {
         // tab.isMuted = true
+    }
+    func toggleFullScreen(_ isFullScreen: Bool) {
+            self.isFullScreen = isFullScreen
+            objectWillChange.send() // Trigger UI update
+        }
+    func setupAdBlocking() {
+        let adBlockRules = """
+        [
+            {
+                "trigger": {
+                    "url-filter": ".*",
+                    "resource-type": ["image", "script", "style-sheet", "font"],
+                    "if-domain": [
+                        "*doubleclick.net",
+                        "*googlesyndication.com",
+                        "*adnxs.com",
+                        "*adservice.google.com",
+                        "*google-analytics.com",
+                        "*ads.pubmatic.com",
+                        "*adroll.com"
+                    ]
+                },
+                "action": {
+                    "type": "block"
+                }
+            },
+            {
+                "trigger": {
+                    "url-filter": ".*",
+                    "resource-type": ["script"],
+                    "if-domain": ["*trackers.com"]
+                },
+                "action": {
+                    "type": "block"
+                }
+            }
+        ]
+        """
+        
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "AdBlockingRules",
+            encodedContentRuleList: adBlockRules
+        ) { [weak self] ruleList, error in
+            guard let self = self else { return }
+            if let error = error {
+                print("Failed to compile ad blocking rules: \(error)")
+                return
+            }
+            self.adBlockRuleList = ruleList
+            if self.isAdBlockingEnabled {
+                self.applyAdBlocking()
+            }
+        }
+    }
+    
+    func updateAdBlocking(enabled: Bool) {
+        isAdBlockingEnabled = enabled
+        applyAdBlocking()
+    }
+    
+    private func applyAdBlocking() {
+         let tabs = tabs
+        for tab in tabs {
+            guard let webView = tab.webView else { continue }
+            webView.configuration.userContentController.removeAllContentRuleLists()
+            if isAdBlockingEnabled, let ruleList = adBlockRuleList {
+                webView.configuration.userContentController.add(ruleList)
+            }
+        }
+    }
+    
+    func updateJavaScript(enabled: Bool) {
+        isJavaScriptEnabled = enabled
+        let tabs = tabs
+        for tab in tabs {
+            guard let webView = tab.webView else { continue }
+            webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = enabled
+            if !enabled {
+                webView.reload() // Reload to apply JavaScript disable
+            }
+        }
+    }
+    
+    func updateIncognitoMode(enabled: Bool) {
+//        isIncognitoMode = enabled
+//        guard let tabs = tabs else { return }
+//        for tab in tabs {
+//            guard let webView = tab.webView else { continue }
+//            if enabled {
+//                webView.configuration.websiteDataStore = .nonPersistent()
+//            } else {
+//                webView.configuration.websiteDataStore = .default()
+//            }
+//            webView.reload() // Reload to apply new data store
+//        }
+    }
+    
+    func updatePopupBlocking(enabled: Bool) {
+        isPopupBlockingEnabled = enabled
+        let tabs = tabs
+        for tab in tabs {
+            guard let webView = tab.webView else { continue }
+            webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = !enabled
+        }
     }
 }
 

@@ -13,10 +13,13 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var keyEventMonitor: Any?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        //setupGlobalKeyboardShortcuts()
         setupAppearance()
-    }
-    
+        if let window = NSApplication.shared.windows.first {
+                    window.delegate = self // Set delegate for full-screen events
+                    // Removed styleMask.insert(.fullScreen) to avoid exception
+                    window.collectionBehavior.insert(.fullScreenPrimary) // Allow full-screen mode
+                }
+        }
     func applicationWillTerminate(_ notification: Notification) {
         if let monitor = keyEventMonitor {
             NSEvent.removeMonitor(monitor)
@@ -27,6 +30,34 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setupAppearance() {
         NSWindow.allowsAutomaticWindowTabbing = false
     }
+    @MainActor func windowWillEnterFullScreen(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                browserViewModel?.toggleFullScreen(true)
+                print("Window will enter full-screen mode, frame: \(window.frame)")
+                DispatchQueue.main.async {
+                    window.contentView?.frame = window.frame // Force content view to match
+                    window.contentView?.needsLayout = true // Trigger layout update
+                }
+            }
+        }
+
+    @MainActor func windowWillExitFullScreen(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                browserViewModel?.toggleFullScreen(false)
+                print("Window will exit full-screen mode, frame: \(window.frame)")
+                DispatchQueue.main.async {
+                    window.contentView?.frame = window.frame
+                    window.contentView?.needsLayout = true
+                }
+            }
+        }
+
+        func windowDidResize(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                print("Window resized to: \(window.frame)")
+                window.contentView?.needsLayout = true // Ensure content view updates
+            }
+        }
     
     // MARK: - Menu Actions
     @MainActor @objc func newTab(_ sender: Any?) {
@@ -100,6 +131,21 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         default:
             return true
+        }
+    }
+}
+
+
+extension VelaAppDelegate: NSWindowDelegate {
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        if let window = notification.object as? NSWindow {
+            window.contentView?.frame = window.frame
+        }
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        if let window = notification.object as? NSWindow {
+            window.contentView?.frame = window.frame
         }
     }
 }

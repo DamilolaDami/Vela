@@ -1,10 +1,10 @@
 import SwiftUI
 
-import SwiftUI
 
 struct BrowserToolbar: View {
     @ObservedObject var viewModel: BrowserViewModel
-    
+    @ObservedObject var bookmarkViewModel: BookmarkViewModel
+    @ObservedObject var suggestionVM: SuggestionViewModel
     var body: some View {
         HStack(spacing: 12) {
             // Navigation buttons
@@ -38,7 +38,8 @@ struct BrowserToolbar: View {
                 text: $viewModel.addressText,
                 isEditing: $viewModel.isEditing,
                 onCommit: viewModel.navigateToURL,
-                currentURL: viewModel.currentTab?.url
+                currentURL: viewModel.currentTab?.url,
+                suggestionVM: suggestionVM
             )
             
             // Action buttons
@@ -51,7 +52,7 @@ struct BrowserToolbar: View {
                 .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL))
                 .disabled(!hasURL)
                 
-                Button(action: addBookmark) {
+                Button(action: toggleBookmark) {
                     Image(systemName: isBookmarked ? "heart.fill" : "heart")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(isBookmarked ? .red : .primary)
@@ -71,6 +72,19 @@ struct BrowserToolbar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Rectangle())
+        .sheet(isPresented: $bookmarkViewModel.isShowingAddBookmarkSheet) {
+            if let url = viewModel.currentTab?.url {
+                AddBookmarkSheet(
+                    bookmarkViewModel: bookmarkViewModel,
+                    url: url,
+                    title: viewModel.currentTab?.title
+                )
+            } else {
+                AddBookmarkSheet(bookmarkViewModel: bookmarkViewModel)
+            }
+        }
+       
+       
     }
     
     // MARK: - Computed Properties
@@ -78,14 +92,17 @@ struct BrowserToolbar: View {
     private var canGoBack: Bool {
         viewModel.currentTab?.canGoBack ?? false
     }
+   
     
     private var canGoForward: Bool {
         viewModel.currentTab?.canGoForward ?? false
     }
     
     private var isBookmarked: Bool {
-        // TODO: Check if current URL is bookmarked
-        false
+        guard let url = viewModel.currentTab?.url else { return false }
+        return bookmarkViewModel.bookmarks.contains { bookmark in
+            bookmark.url?.absoluteString == url.absoluteString
+        }
     }
     
     private var hasURL: Bool {
@@ -96,21 +113,21 @@ struct BrowserToolbar: View {
     
     private func goBack() {
         // TODO: Implement navigation back
-      //  viewModel.currentTab?.goBack()
+        //  viewModel.currentTab?.goBack()
     }
     
     private func goForward() {
         // TODO: Implement navigation forward
-       // viewModel.currentTab?.goForward()
+        // viewModel.currentTab?.goForward()
     }
     
     private func refresh() {
         if viewModel.isLoading {
             // TODO: Stop loading
-         //   viewModel.currentTab?.stopLoading()
+            //   viewModel.currentTab?.stopLoading()
         } else {
             // TODO: Reload page
-           // viewModel.currentTab?.reload()
+            //   viewModel.currentTab?.reload()
         }
     }
     
@@ -127,13 +144,32 @@ struct BrowserToolbar: View {
         NotificationService.shared.showSuccess("URL copied")
     }
     
-    private func addBookmark() {
-        // TODO: Add/remove bookmark
+    private func toggleBookmark() {
+        guard let url = viewModel.currentTab?.url else { return }
+        
         if isBookmarked {
-            print("Bookmark removed")
+            removeBookmark(url: url)
         } else {
-            print("Bookmark added")
+            showAddBookmarkSheet(url: url)
         }
+    }
+    
+    private func showAddBookmarkSheet(url: URL) {
+        // Get page title from current tab or use URL as fallback
+        let title = viewModel.currentTab?.title ?? url.host ?? url.absoluteString
+        
+        // Set up the bookmark view model for adding
+        bookmarkViewModel.bookmarkToEdit = nil
+        bookmarkViewModel.isShowingAddBookmarkSheet = true
+    }
+    
+    private func removeBookmark(url: URL) {
+        guard let bookmark = bookmarkViewModel.bookmarks.first(where: {
+            $0.url?.absoluteString == url.absoluteString
+        }) else { return }
+        
+        bookmarkViewModel.deleteBookmark(bookmark)
+        NotificationService.shared.showSuccess("Bookmark removed")
     }
     
     private func shareURL() {
@@ -153,7 +189,6 @@ struct BrowserToolbar: View {
         #elseif os(macOS)
         let sharingService = NSSharingService(named: .sendViaAirDrop)
         sharingService?.perform(withItems: [url])
-        
         #endif
     }
 }

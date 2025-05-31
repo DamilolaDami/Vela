@@ -7,7 +7,7 @@ protocol CreateTabUseCaseProtocol {
 
 class CreateTabUseCase: CreateTabUseCaseProtocol {
     private let tabRepository: TabRepositoryProtocol
-    private let spaceRepository: SpaceRepositoryProtocol // Add SpaceRepository to access default space
+    private let spaceRepository: SpaceRepositoryProtocol 
     
     init(tabRepository: TabRepositoryProtocol, spaceRepository: SpaceRepositoryProtocol) {
         self.tabRepository = tabRepository

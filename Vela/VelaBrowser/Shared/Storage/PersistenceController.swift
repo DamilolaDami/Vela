@@ -7,7 +7,7 @@ class PersistenceController {
     
     init(inMemory: Bool = false) {
         do {
-            let schema = Schema([TabEntity.self, HistoryEntity.self, SpaceEntity.self])
+            let schema = Schema([TabEntity.self, HistoryEntity.self, SpaceEntity.self, BookmarkEntity.self])
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: inMemory

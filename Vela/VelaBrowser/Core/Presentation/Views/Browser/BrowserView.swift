@@ -7,42 +7,56 @@
 
 import SwiftUI
 
-
 struct BrowserView: View {
     @StateObject private var viewModel: BrowserViewModel
+    @StateObject private var bookMarkViewModel: BookmarkViewModel
     @StateObject private var previewManager = TabPreviewManager()
-    init(viewModel: BrowserViewModel) {
+    @StateObject private var suggestionViewModel: SuggestionViewModel
+    init(viewModel: BrowserViewModel, bookMarkViewModel: BookmarkViewModel, suggestionViewModel: SuggestionViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
+        self._bookMarkViewModel = StateObject(wrappedValue: bookMarkViewModel)
+        self._suggestionViewModel = StateObject(wrappedValue: suggestionViewModel)
     }
     
     var body: some View {
         VStack(spacing: 0) {
-           
             NavigationSplitView(columnVisibility: $viewModel.columnVisibility) {
                 // Sidebar
-
-                SidebarView(viewModel: viewModel, previewManager: previewManager)
+                    SidebarView(viewModel: viewModel, previewManager: previewManager)
                         .frame(minWidth: 280, maxWidth: 320)
                         .navigationSplitViewColumnWidth(280)
-
             } detail: {
                 // Main Content
                 VStack(spacing: 0) {
-                    // Toolbar
-                    BrowserToolbar(viewModel: viewModel)
-                    
-                    // Web Content
+                    BrowserToolbar(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel, suggestionVM: suggestionViewModel)
                     if viewModel.currentTab != nil {
                         WebViewContainer(viewModel: viewModel)
                     } else {
                         StartPageView(viewModel: viewModel)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity) // Fill available space
                 .toolbar(removing: .sidebarToggle)
+                .overlay(alignment: .top) {
+                    if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty {
+                        SuggestionsListView(
+                                 suggestionViewModel: suggestionViewModel,
+                                 onSuggestionSelected: { selectedURL in
+                                     viewModel.addressText = selectedURL
+                                     viewModel.navigateToURL()
+                                 },
+                                 onEditingChanged: { isEditing in
+                                     viewModel.isEditing = isEditing
+                                 }
+                             )
+                            .frame(maxWidth: 530)
+                            .padding(.top, 4)
+                           // .transition(.opacity.combined(with: .move(edge: .top)))
+                            .offset(y: 48)
+                    }
+                }
             }
-           
         }
-    
         .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
         .browserKeyboardShortcuts(viewModel: viewModel)
         .focusable()
@@ -50,5 +64,7 @@ struct BrowserView: View {
             TabPreviewOverlay(previewManager: previewManager)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         )
+       
     }
+   
 }

@@ -7,11 +7,11 @@
 import SwiftUI
 
 
-struct SearchSuggestion: Equatable {
+struct SearchSuggestion: Equatable, Identifiable {
     let id = UUID()
     let title: String
     let subtitle: String?
-    let url: String
+    let url: String?
     let type: SuggestionType
     
     static func == (lhs: SearchSuggestion, rhs: SearchSuggestion) -> Bool {

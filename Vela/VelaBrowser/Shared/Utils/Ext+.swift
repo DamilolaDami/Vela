@@ -56,6 +56,18 @@ extension View {
     func browserKeyboardShortcuts(viewModel: BrowserViewModel) -> some View {
             self.modifier(BrowserKeyboardShortcutModifier(viewModel: viewModel))
         }
+        func glassBackground(
+            material: NSVisualEffectView.Material = .contentBackground,
+            blendingMode: NSVisualEffectView.BlendingMode = .withinWindow
+        ) -> some View {
+            self.modifier(
+                GlassBackground(
+                    material: material,
+                    blendingMode: blendingMode
+                )
+                
+            )
+        }
 
 }
 
@@ -169,4 +181,5 @@ extension TabPreview {
         static let shadowOffset: CGSize = CGSize(width: 0, height: 4)
     }
 }
+
 

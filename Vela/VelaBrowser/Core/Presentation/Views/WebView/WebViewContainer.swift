@@ -17,6 +17,7 @@ struct WebViewContainer: View {
                 .id(currentTab.id)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if !hasInitialLoad {
                 loadInitialURL()

@@ -1,207 +1,218 @@
 import SwiftUI
+// MARK: - Updated SidebarHeader
+//
+//  SidebarHeader.swift
+//  Vela
+//
+//   sidebar header  design
+//
 
+import SwiftUI
+
+// MARK: - Main SidebarHeader View
 struct SidebarHeader: View {
     @ObservedObject var viewModel: BrowserViewModel
-    @State private var showProfileMenu = false
     @State private var showDownloads = false
+    @State private var showSettings = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Quick action bar
-            HStack(spacing: 16) {
-                // Search button
-                Button(action: {}) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 12))
-                        Text("Search")
-                            .font(.system(size: 12))
-                    }
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(NSColor.controlBackgroundColor))
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
+            // Main header content
+            VStack(spacing: 12) {
+                // Top row - Search
+                SearchBarView()
                 
-                Spacer()
-                
-                // Browser mode toggle
-                Button(action: {}) {
-                    Image(systemName: viewModel.isIncognitoMode ? "eye.slash" : "eye")
-                        .font(.system(size: 12))
-                        .foregroundColor(viewModel.isIncognitoMode ? .orange : .secondary)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Downloads
-                Button(action: {
-                    showDownloads.toggle()
-                }) {
-                    ZStack {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        // Badge for active downloads
-                        if viewModel.activeDownloadsCount > 0 {
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 8, height: 8)
-                                .offset(x: 6, y: -6)
-                        }
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-                .popover(isPresented: $showDownloads, arrowEdge: .bottom) {
-                    DownloadsView(viewModel: viewModel)
-                        .frame(width: 300, height: 200)
-                }
+                // Bottom row - Action buttons
+                ActionButtonsRow(
+                    viewModel: viewModel,
+                    showDownloads: $showDownloads,
+                    showSettings: $showSettings
+                )
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.vertical, 12)
             
-            // Separator
-            Rectangle()
-                .fill(Color(NSColor.separatorColor))
-                .frame(height: 0.5)
+            // Enhanced separator
+            SeparatorView()
         }
         .background(.regularMaterial)
     }
 }
 
-// MARK: - Downloads View
-struct DownloadsView: View {
-    @ObservedObject var viewModel: BrowserViewModel
+// MARK: - Search Bar Sub-View
+struct SearchBarView: View {
+    @State private var searchHovered = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text("Downloads")
-                    .font(.headline)
-                    .padding(.leading, 16)
-                    .padding(.top, 12)
-                
-                Spacer()
-                
-                Button("Clear All") {
-                    viewModel.clearAllDownloads()
+        HStack(spacing: 12) {
+            Button(action: {
+                // Handle search action
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                    
+                    Text("Search tabs, history...")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(NSColor.tertiarySystemFill))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    KeyboardShortcutHint(shortcut: "⌘K")
                 }
-                .font(.caption)
-                .padding(.trailing, 16)
-                .padding(.top, 12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(searchHovered ? Color.black.opacity(0.03) : Color(NSColor.controlBackgroundColor))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.black.opacity(0.08), lineWidth: 0.5)
+                        )
+                )
             }
-            
-            Divider()
-                .padding(.vertical, 8)
-            
-            // Downloads list
-            if viewModel.downloads.isEmpty {
-                VStack {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 32))
-                        .foregroundColor(.secondary)
-                    Text("No downloads yet")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        ForEach(viewModel.downloads) { download in
-                            DownloadRowView(download: download, viewModel: viewModel)
-                        }
-                    }
-                    .padding(.horizontal, 8)
+            .buttonStyle(PlainButtonStyle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    searchHovered = hovering
                 }
             }
         }
     }
 }
 
-// MARK: - Download Row View
-struct DownloadRowView: View {
-    let download: DownloadItem
-    @ObservedObject var viewModel: BrowserViewModel
+// MARK: - Keyboard Shortcut Hint Sub-View
+struct KeyboardShortcutHint: View {
+    let shortcut: String
     
     var body: some View {
-        HStack(spacing: 8) {
-            // File icon
-            Image(systemName: fileIcon(for: download.filename))
-                .foregroundColor(.blue)
-                .frame(width: 16)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(download.filename)
-                    .font(.caption)
-                    .lineLimit(1)
-                
-                if download.isDownloading {
-                    ProgressView(value: download.progress)
-                        .progressViewStyle(LinearProgressViewStyle())
-                        .frame(height: 4)
-                } else {
-                    Text(download.status)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
+        Text(shortcut)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundColor(Color(NSColor.quaternarySystemFill))
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.secondary.opacity(0.1))
+            )
+    }
+}
+
+// MARK: - Action Buttons Row Sub-View
+struct ActionButtonsRow: View {
+    @ObservedObject var viewModel: BrowserViewModel
+    @Binding var showDownloads: Bool
+    @Binding var showSettings: Bool
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            // Incognito mode toggle
+            IncognitoToggleButton(viewModel: viewModel)
             
             Spacer()
             
-            // Action buttons
-            if download.isCompleted {
-                Button(action: {
-                    viewModel.showDownloadInFinder(download)
-                }) {
-                    Image(systemName: "folder")
-                        .font(.caption)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
+            // Downloads button
+            DownloadsButton(
+                viewModel: viewModel,
+                showDownloads: $showDownloads
+            )
             
-            Button(action: {
-                viewModel.removeDownload(download)
-            }) {
-                Image(systemName: "xmark")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        )
-    }
-    
-    private func fileIcon(for filename: String) -> String {
-        let ext = (filename as NSString).pathExtension.lowercased()
-        switch ext {
-        case "pdf": return "doc.richtext"
-        case "zip", "rar", "7z": return "doc.zipper"
-        case "jpg", "jpeg", "png", "gif": return "photo"
-        case "mp4", "mov", "avi": return "play.rectangle"
-        case "mp3", "wav", "m4a": return "music.note"
-        case "doc", "docx": return "doc.text"
-        case "xls", "xlsx": return "tablecells"
-        case "ppt", "pptx": return "presentation"
-        default: return "doc"
+            // Settings button
+            SettingsButton(showSettings: $showSettings, viewModel: viewModel)
+            
+           
         }
     }
 }
 
-// MARK: - Extensions
-extension BrowserViewModel {
-    var isIncognitoMode: Bool {
-        // Return actual incognito state
-        return false // Placeholder
+// MARK: - Incognito Toggle Button Sub-View
+struct IncognitoToggleButton: View {
+    @ObservedObject var viewModel: BrowserViewModel
+    
+    var body: some View {
+        ActionButton(
+            icon: viewModel.isIncognitoMode ? "eye.slash.fill" : "eye.fill",
+            isActive: viewModel.isIncognitoMode,
+            activeColor: .orange,
+            tooltip: viewModel.isIncognitoMode ? "Exit Incognito" : "Enter Incognito"
+        ) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                viewModel.isIncognitoMode.toggle()
+                viewModel.updateIncognitoMode(enabled: viewModel.isIncognitoMode)
+            }
+        }
     }
 }
+
+// MARK: - Downloads Button Sub-View
+struct DownloadsButton: View {
+    @ObservedObject var viewModel: BrowserViewModel
+    @Binding var showDownloads: Bool
+    
+    var body: some View {
+        ActionButton(
+            icon: "arrow.down.circle.fill",
+            badge: viewModel.activeDownloadsCount,
+            tooltip: "Downloads"
+        ) {
+            showDownloads.toggle()
+        }
+        .popover(isPresented: $showDownloads, arrowEdge: .bottom) {
+            DownloadsView(viewModel: viewModel)
+        }
+    }
+}
+
+// MARK: - Settings Button Sub-View
+struct SettingsButton: View {
+    @Binding var showSettings: Bool
+    var viewModel: BrowserViewModel
+    
+    var body: some View {
+        ActionButton(
+            icon: "gearshape.fill",
+            tooltip: "Settings"
+        ) {
+            showSettings.toggle()
+        }
+        .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+            SettingsView(viewModel: viewModel)
+        }
+    }
+}
+
+
+// MARK: - Separator Sub-View
+struct SeparatorView: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.clear,
+                Color(NSColor.separatorColor).opacity(0.3),
+                Color.clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(height: 0.5)
+        .padding(.horizontal, 8)
+    }
+}
+
+// MARK: - Background Gradient Sub-View
+struct BackgroundGradientView: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(NSColor.controlBackgroundColor),
+                Color(NSColor.controlBackgroundColor).opacity(0.95)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+
+
+

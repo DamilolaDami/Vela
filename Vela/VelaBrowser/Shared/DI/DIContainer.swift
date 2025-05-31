@@ -19,6 +19,12 @@ class DIContainer: ObservableObject {
     }
     
     @MainActor
+    func makeBookmarkRepository() -> BookmarkRepositoryProtocol {
+        return BookmarkRepository(context:PersistenceController.shared.context.mainContext)
+    }
+    
+    
+    @MainActor
     func makeBrowserViewModel() -> BrowserViewModel {
         return BrowserViewModel(
             createTabUseCase: makeCreateTabUseCase(),
@@ -26,6 +32,17 @@ class DIContainer: ObservableObject {
             spaceRepository: makeSpaceRepository()
         )
     }
+    @MainActor
+    func makeBookMarkViewModel() -> BookmarkViewModel {
+        return BookmarkViewModel(
+            bookmarkRepository: makeBookmarkRepository()
+        )
+    }
+    @MainActor
+    func makeSuggestionViewModel() -> SuggestionViewModel {
+        return SuggestionViewModel()
+    }
+    
     
     private init() {}
 }

@@ -135,7 +135,9 @@ class Tab: Identifiable, Equatable, ObservableObject {
         }
         
         self.webView = webView
-        isPlayingAudio = false
+        DispatchQueue.main.async {
+            self.isPlayingAudio = false
+        }
         
         // Setup navigation delegate
         navigationDelegate = TabNavigationDelegate(tab: self)

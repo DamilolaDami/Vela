@@ -18,11 +18,11 @@ struct BottomActions: View {
                 .opacity(0.5)
 
             HStack(spacing: 16) {
-                ActionButton(icon: "gear", action: {
+                ActionButton(icon: "gear", tooltip: "Settings", action: {
                     // Settings action
                 })
 
-                ActionButton(icon: "plus", action: {
+                ActionButton(icon: "plus", tooltip: "New Tab or Space",  action: {
                     showNewMenu = true
                 })
                 .popover(isPresented: $showNewMenu, arrowEdge: .top) {
@@ -34,7 +34,7 @@ struct BottomActions: View {
                
                 Spacer()
 
-                ActionButton(icon: "sidebar.right", action: {
+                ActionButton(icon: "sidebar.right", tooltip: "Toggle Sidebar", action: {
                     withAnimation {
                         viewModel.columnVisibility = .detailOnly
                     }
@@ -492,27 +492,3 @@ struct MenuButton: View {
     }
 }
 
-struct ActionButton: View {
-    let icon: String
-    let action: () -> Void
-    @State private var isHovered = false
-    
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.secondary)
-                .frame(width: 24, height: 24)
-                .background(
-                    Circle()
-                        .fill(Color.primary.opacity(isHovered ? 0.1 : 0))
-                )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovered = hovering
-            }
-        }
-    }
-}

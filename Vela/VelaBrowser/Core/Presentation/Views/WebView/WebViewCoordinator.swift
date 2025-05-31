@@ -152,23 +152,52 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         // Inject JavaScript to ensure full-screen API is available
         let fullscreenScript = """
         (function() {
-            var element = document.documentElement;
-            if (element.requestFullscreen) {
+            // Polyfill for requestFullscreen across all elements
+            function enableFullscreen(element) {
                 element.requestFullscreen = element.requestFullscreen ||
                     element.webkitRequestFullscreen ||
                     element.mozRequestFullScreen ||
                     element.msRequestFullscreen ||
                     function() { return Promise.reject(new Error('Fullscreen API is not supported')); };
+                
+                element.webkitEnterFullscreen = element.webkitEnterFullscreen ||
+                    function() { 
+                        if (element.requestFullscreen) {
+                            element.requestFullscreen();
+                        }
+                    };
             }
+            
+            // Apply to all elements
+            document.querySelectorAll('*').forEach(enableFullscreen);
+            
+            // Apply to document.documentElement and video elements specifically
+            enableFullscreen(document.documentElement);
+            document.querySelectorAll('video').forEach(enableFullscreen);
+            
+            // Observe DOM changes to apply to dynamically added elements
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element nodes only
+                            enableFullscreen(node);
+                            if (node.tagName === 'VIDEO') {
+                                enableFullscreen(node);
+                            }
+                        }
+                    });
+                });
+            });
+            
+            observer.observe(document, { childList: true, subtree: true });
+            
+            // Ensure YouTube-specific fullscreen support
+            window.webkitSupportsFullscreen = true;
+            window.webkitEnterFullscreen = function() {
+                document.documentElement.requestFullscreen();
+            };
         })();
         """
-        webView.evaluateJavaScript(fullscreenScript) { _, error in
-            if let error = error {
-                print("Error injecting fullscreen script: \(error)")
-            } else {
-                print("Fullscreen script injected successfully")
-            }
-        }
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
