@@ -8,6 +8,7 @@
 import SwiftUICore
 import CoreData
 import AppKit
+import WebKit
 
 
 // MARK: - Color Extensions
@@ -131,3 +132,41 @@ struct BrowserKeyboardShortcutModifier: ViewModifier {
         content
     }
 }
+
+extension Tab {
+    /// Captures a fresh snapshot of the tab's web view
+    func captureSnapshot(completion: @escaping (NSImage?) -> Void) {
+        guard let webView = self.webView else {
+            completion(nil)
+            return
+        }
+        
+        let config = WKSnapshotConfiguration()
+        config.rect = CGRect(x: 0, y: 0, width: webView.bounds.width, height: webView.bounds.height)
+        
+        webView.takeSnapshot(with: config) { image, error in
+            DispatchQueue.main.async {
+                completion(image)
+            }
+        }
+    }
+    
+    /// Whether this tab can show a preview (has a loaded web view)
+    var canShowPreview: Bool {
+        return webView != nil && !isLoading && url != nil
+    }
+}
+
+extension TabPreview {
+    struct Preferences {
+        static let previewDelay: TimeInterval = 0.8
+        static let previewWidth: CGFloat = 344
+        static let previewHeight: CGFloat = 240
+        static let thumbnailWidth: CGFloat = 320
+        static let thumbnailHeight: CGFloat = 180
+        static let cornerRadius: CGFloat = 12
+        static let shadowRadius: CGFloat = 12
+        static let shadowOffset: CGSize = CGSize(width: 0, height: 4)
+    }
+}
+

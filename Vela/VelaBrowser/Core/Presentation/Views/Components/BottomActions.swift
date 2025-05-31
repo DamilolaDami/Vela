@@ -35,7 +35,9 @@ struct BottomActions: View {
                 Spacer()
 
                 ActionButton(icon: "sidebar.right", action: {
-                    viewModel.toggleSidebar()
+                    withAnimation {
+                        viewModel.columnVisibility = .detailOnly
+                    }
                 })
             }
             .padding(.horizontal, 16)

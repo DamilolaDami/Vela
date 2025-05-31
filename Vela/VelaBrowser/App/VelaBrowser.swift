@@ -16,12 +16,13 @@ struct VelaApp: App {
     
     var body: some Scene {
         WindowGroup {
-            BrowserView(viewModel: container.makeBrowserViewModel())
+            let container = container.makeBrowserViewModel()
+            BrowserView(viewModel: container)
                 .withNotificationBanners()
                 .frame(minWidth: 1200, minHeight: 700)
                 .onAppear {
                     // Inject the view model into the app delegate
-                    appDelegate.browserViewModel = container.makeBrowserViewModel()
+                    appDelegate.browserViewModel = container
                 }
         }
         .windowStyle(.hiddenTitleBar)

@@ -21,15 +21,12 @@ class GlobalKeyEventHandler: ObservableObject {
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let viewModel = self?.viewModel else { return event }
             
-            // Let the menu system try to handle the event first
-          //  NSApp.sendEvent(event)
-            
-            // Check if the event was consumed by the menu system
+            // Let the menu system handle the event first
             if NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
-                return nil // Menu handled the event
+                return nil // Menu handled the event, consume it
             }
             
-            // Handle the event if it matches a custom shortcut
+            // Handle custom shortcuts
             if let shortcut = KeyboardShortcut.from(event: event) {
                 DispatchQueue.main.async {
                     viewModel.handleKeyboardShortcut(shortcut)
@@ -37,10 +34,9 @@ class GlobalKeyEventHandler: ObservableObject {
                 return nil // Consume the event
             }
             
-            return event // Let the event continue
+            return event // Let unhandled events pass through
         }
     }
-  
 
     deinit {
         if let monitor = eventMonitor {

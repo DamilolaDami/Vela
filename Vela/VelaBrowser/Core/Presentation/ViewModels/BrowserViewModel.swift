@@ -19,33 +19,15 @@ class BrowserViewModel: ObservableObject {
     @Published var isShowingCreateSpaceSheet: Bool = false
     @Published var isShowingSpaceInfoPopover = false
     @Published var spaceForInfoPopover: Space? = nil
-    @Published var lastKeyboardAction: KeyboardAction = .none // Add this for tracking
+    @Published var columnVisibility = NavigationSplitViewVisibility.all
     
     private let createTabUseCase: CreateTabUseCaseProtocol
     private let tabRepository: TabRepositoryProtocol
     private let spaceRepository: SpaceRepositoryProtocol
     private var cancellables = Set<AnyCancellable>()
     
-    // Enum to track keyboard actions for view refresh
-    enum KeyboardAction: Equatable {
-        case none
-        case newTab
-        case closeTab
-        case switchTab
-        case navigation
-        case other(String)
-        
-        static func == (lhs: KeyboardAction, rhs: KeyboardAction) -> Bool {
-            switch (lhs, rhs) {
-            case (.none, .none), (.newTab, .newTab), (.closeTab, .closeTab),
-                 (.switchTab, .switchTab), (.navigation, .navigation):
-                return true
-            case (.other(let l), .other(let r)):
-                return l == r
-            default:
-                return false
-            }
-        }
+    private enum UserDefaultsKeys {
+        static let lastSelectedSpaceId = "lastSelectedSpaceId"
     }
     
     init(
@@ -58,7 +40,6 @@ class BrowserViewModel: ObservableObject {
         self.spaceRepository = spaceRepository
         setupInitialState()
         setupBindings()
-        setupKeyboardShortcuts()
     }
     
     private func setupInitialState() {
@@ -73,9 +54,17 @@ class BrowserViewModel: ObservableObject {
                 receiveValue: { [weak self] spaces in
                     guard let self = self else { return }
                     self.spaces = spaces.isEmpty ? [Space(name: "Personal", color: .blue, isDefault: true)] : spaces
-                    self.currentSpace = self.spaces.first
+                    
+                    // Retrieve the last selected space ID from UserDefaults
+                    if let lastSpaceIdString = UserDefaults.standard.string(forKey: UserDefaultsKeys.lastSelectedSpaceId),
+                       let lastSpaceId = UUID(uuidString: lastSpaceIdString),
+                       let savedSpace = spaces.first(where: { $0.id == lastSpaceId }) {
+                        self.currentSpace = savedSpace
+                    } else {
+                        self.currentSpace = self.spaces.first
+                    }
+                    
                     self.loadTabs()
-                    self.forceViewRefresh()
                 }
             )
             .store(in: &cancellables)
@@ -83,44 +72,26 @@ class BrowserViewModel: ObservableObject {
     
     private func setupBindings() {
         $currentTab
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] tab in
                 guard let self = self, !self.isEditing else { return }
                 self.addressText = tab?.url?.absoluteString ?? ""
                 self.isLoading = tab?.isLoading ?? false
-                self.forceViewRefresh()
             }
             .store(in: &cancellables)
         
         $currentSpace
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] space in
                 guard let self = self else { return }
+                if let spaceId = space?.id {
+                    UserDefaults.standard.set(spaceId.uuidString, forKey: UserDefaultsKeys.lastSelectedSpaceId)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.lastSelectedSpaceId)
+                }
                 self.loadTabs()
-                self.forceViewRefresh()
             }
             .store(in: &cancellables)
-    }
-    
-    // MARK: - View Refresh Helper
-    private func forceViewRefresh() {
-        // Force SwiftUI to refresh the view
-        objectWillChange.send()
-        
-        // Small delay to ensure UI updates
-        DispatchQueue.main.async {
-            self.objectWillChange.send()
-        }
-    }
-    
-    private func triggerKeyboardAction(_ action: KeyboardAction) {
-        lastKeyboardAction = action
-        forceViewRefresh()
-        
-        // Reset after a short delay to allow for next action
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if self.lastKeyboardAction == action {
-                self.lastKeyboardAction = .none
-            }
-        }
     }
     
     // MARK: - Space Management
@@ -134,13 +105,11 @@ class BrowserViewModel: ObservableObject {
                         print("Failed to create space: \(error)")
                     } else {
                         self?.loadSpaces()
-                        self?.forceViewRefresh()
                     }
                 },
                 receiveValue: { [weak self] newSpace in
                     self?.spaces.append(newSpace)
                     self?.currentSpace = newSpace
-                    self?.forceViewRefresh()
                 }
             )
             .store(in: &cancellables)
@@ -157,7 +126,6 @@ class BrowserViewModel: ObservableObject {
                 },
                 receiveValue: { [weak self] in
                     self?.loadSpaces()
-                    self?.forceViewRefresh()
                 }
             )
             .store(in: &cancellables)
@@ -175,7 +143,6 @@ class BrowserViewModel: ObservableObject {
                         if self?.currentSpace?.id == space.id {
                             self?.currentSpace = self?.spaces.first
                         }
-                        self?.forceViewRefresh()
                     }
                 },
                 receiveValue: { }
@@ -186,7 +153,6 @@ class BrowserViewModel: ObservableObject {
     func selectSpace(_ space: Space) {
         currentSpace = space
         loadTabs()
-        forceViewRefresh()
     }
     
     private func loadSpaces() {
@@ -203,19 +169,14 @@ class BrowserViewModel: ObservableObject {
                     if self?.currentSpace == nil || !spaces.contains(where: { $0.id == self?.currentSpace?.id }) {
                         self?.currentSpace = self?.spaces.first
                     }
-                    self?.forceViewRefresh()
                 }
             )
             .store(in: &cancellables)
     }
-
-    private func setupKeyboardShortcuts() {
-        // This would typically be handled in your main view or app delegate
-    }
     
-    // MARK: - Tab Management with View Refresh
+    // MARK: - Tab Management
     
-    func createNewTab(with url: URL? = nil, inBackground: Bool = false, shouldReloadTabs: Bool? = false) {
+    func createNewTab(with url: URL? = nil, inBackground: Bool = false, shouldReloadTabs: Bool = false) {
         let previousTab = currentTab
         
         if !inBackground {
@@ -231,9 +192,11 @@ class BrowserViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] tab in
-                    self?.configureNewTab(tab, inBackground: inBackground, previousTab: previousTab)
-                    self?.loadTabs()
-                    self?.triggerKeyboardAction(.newTab)
+                    guard let self = self else { return }
+                    self.configureNewTab(tab, inBackground: inBackground, previousTab: previousTab)
+                    if shouldReloadTabs {
+                        self.loadTabs()
+                    }
                 }
             )
             .store(in: &cancellables)
@@ -274,7 +237,6 @@ class BrowserViewModel: ObservableObject {
             currentTab = tab
         }
         
-        forceViewRefresh()
         print("Created tab with URL: \(tab.url?.absoluteString ?? "nil"), background: \(inBackground)")
     }
     
@@ -283,7 +245,6 @@ class BrowserViewModel: ObservableObject {
               let url = current.url else { return }
         
         createNewTab(with: url, inBackground: inBackground)
-        triggerKeyboardAction(.other("duplicate"))
     }
     
     func selectTab(_ tab: Tab) {
@@ -291,7 +252,6 @@ class BrowserViewModel: ObservableObject {
         print("Selecting tab: \(tab.url?.absoluteString ?? "nil")")
         currentTab = tab
         addressText = currentTab?.url?.absoluteString ?? ""
-        triggerKeyboardAction(.switchTab)
     }
     
     func selectTabAtIndex(_ index: Int) {
@@ -306,7 +266,6 @@ class BrowserViewModel: ObservableObject {
         
         let nextIndex = (currentIndex + 1) % tabs.count
         selectTab(tabs[nextIndex])
-        triggerKeyboardAction(.switchTab)
     }
     
     func selectPreviousTab() {
@@ -316,7 +275,6 @@ class BrowserViewModel: ObservableObject {
         
         let previousIndex = currentIndex == 0 ? tabs.count - 1 : currentIndex - 1
         selectTab(tabs[previousIndex])
-        triggerKeyboardAction(.switchTab)
     }
     
     func updateTab(_ tab: Tab) {
@@ -338,8 +296,6 @@ class BrowserViewModel: ObservableObject {
                     if self.currentTab?.id == updatedTab.id {
                         self.currentTab = updatedTab
                     }
-                    
-                    self.forceViewRefresh()
                 }
             )
             .store(in: &cancellables)
@@ -358,8 +314,6 @@ class BrowserViewModel: ObservableObject {
                 currentTab = tabs[newIndex]
             }
         }
-        
-        triggerKeyboardAction(.closeTab)
     }
     
     func closeAndDeleteTab(_ tab: Tab) {
@@ -396,7 +350,6 @@ class BrowserViewModel: ObservableObject {
                         self.updateSpace(updatedSpace)
                     }
                     
-                    self.triggerKeyboardAction(.closeTab)
                     print("Closed and deleted tab \(tab.id): \(tab.title ?? "Untitled"), \(tab.url?.absoluteString ?? "no URL")")
                 }
             )
@@ -414,7 +367,6 @@ class BrowserViewModel: ObservableObject {
         
         tabs = [keep]
         currentTab = keep
-        triggerKeyboardAction(.closeTab)
     }
     
     func closeTabsToRight(of tab: Tab) {
@@ -427,48 +379,39 @@ class BrowserViewModel: ObservableObject {
            tabsToRemove.contains(where: { $0.id == current.id }) {
             currentTab = tab
         }
-        
-        triggerKeyboardAction(.closeTab)
     }
     
     func reopenLastClosedTab() {
         print("Reopen last closed tab - not implemented")
-        triggerKeyboardAction(.other("reopen"))
     }
     
-    // MARK: - Navigation with View Refresh
+    // MARK: - Navigation
     
     func goBack() {
         currentTab?.webView?.goBack()
-        triggerKeyboardAction(.navigation)
     }
     
     func goForward() {
         currentTab?.webView?.goForward()
-        triggerKeyboardAction(.navigation)
     }
     
     func reload() {
         currentTab?.webView?.reload()
-        triggerKeyboardAction(.navigation)
     }
     
     func reloadIgnoringCache() {
         currentTab?.webView?.reloadFromOrigin()
-        triggerKeyboardAction(.navigation)
     }
     
     func stopLoading() {
         currentTab?.webView?.stopLoading()
-        triggerKeyboardAction(.navigation)
     }
     
     func focusAddressBar() {
         isEditing = true
-        triggerKeyboardAction(.other("focus"))
     }
     
-    // MARK: - Keyboard Shortcut Handlers with Enhanced Refresh
+    // MARK: - Keyboard Shortcut Handlers
     
     func handleKeyboardShortcut(_ shortcut: KeyboardShortcut) {
         print("Handling keyboard shortcut: \(shortcut)")
@@ -509,20 +452,20 @@ class BrowserViewModel: ObservableObject {
         case .toggleSidebar:
             toggleSidebar()
         }
-        
-        // Force a final refresh after handling any shortcut
-        DispatchQueue.main.async {
-            self.forceViewRefresh()
-        }
     }
     
-    // MARK: - Existing Methods with View Refresh
+    // MARK: - UI Actions
     
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.3)) {
             sidebarCollapsed.toggle()
+            if columnVisibility == .all {
+                columnVisibility = .detailOnly
+            } else {
+                columnVisibility = .all
+            }
+            print("columnVisibility : \(columnVisibility)")
         }
-        triggerKeyboardAction(.other("sidebar"))
     }
     
     func navigateToURL() {
@@ -554,14 +497,17 @@ class BrowserViewModel: ObservableObject {
 
         isEditing = false
         isLoading = false
-        triggerKeyboardAction(.navigation)
     }
     
     private func loadTabs() {
         guard let spaceId = currentSpace?.id else {
             tabs = []
             currentTab = nil
-            forceViewRefresh()
+            return
+        }
+        
+        // Skip if tabs are already loaded for the current space
+        if !tabs.isEmpty && tabs.first?.spaceId == spaceId {
             return
         }
         
@@ -573,7 +519,6 @@ class BrowserViewModel: ObservableObject {
                         print("Failed to load tabs for space \(spaceId): \(error)")
                         self?.tabs = []
                         self?.currentTab = nil
-                        self?.forceViewRefresh()
                     }
                 },
                 receiveValue: { [weak self] tabs in
@@ -582,7 +527,7 @@ class BrowserViewModel: ObservableObject {
                     self.tabs = tabs
                     self.currentTab = tabs.first
                     
-                    // Ensure tabs have web views configured
+                    // Configure web views only for new tabs
                     tabs.forEach { tab in
                         if tab.webView == nil {
                             let configuration = WKWebViewConfiguration()
@@ -597,17 +542,13 @@ class BrowserViewModel: ObservableObject {
                             }
                         }
                     }
-                    
-                    self.forceViewRefresh()
                 }
             )
             .store(in: &cancellables)
     }
-    
-    // Legacy methods with view refresh
+    // Legacy methods
     func reloadTab(_ tab: Tab) {
         tab.webView?.reload()
-        triggerKeyboardAction(.navigation)
     }
     
     func duplicateTab(_ tab: Tab) {
@@ -616,15 +557,14 @@ class BrowserViewModel: ObservableObject {
     }
     
     func pinTab(_ tab: Tab) {
-        tab.isPinned = true
-        forceViewRefresh()
+        tab.isPinned = !tab.isPinned
     }
     
     func muteTab(_ tab: Tab) {
         // tab.isMuted = true
-        forceViewRefresh()
     }
 }
+
 
 // MARK: - Keyboard Shortcut Definitions
 
@@ -646,74 +586,108 @@ enum KeyboardShortcut {
     case stop                    // Cmd+.
     case focusAddressBar         // Cmd+L
     case toggleSidebar           // Cmd+Shift+S
-}
 
-// MARK: - Extension for easy shortcut detection
-
-extension KeyboardShortcut {
     static func from(event: NSEvent) -> KeyboardShortcut? {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let keyCode = event.keyCode
         let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
-        
-        print("Processing key event - modifiers: \(modifiers), keyCode: \(keyCode), characters: '\(characters)'")
-        
-        // Command key shortcuts
+
+        // Key codes (based on standard macOS key codes)
+        let tKeyCode: UInt16 = 17    // T
+        let wKeyCode: UInt16 = 13    // W
+        let kKeyCode: UInt16 = 40    // K
+        let lKeyCode: UInt16 = 37    // L
+        let sKeyCode: UInt16 = 1     // S
+        let rKeyCode: UInt16 = 15    // R
+        let periodKeyCode: UInt16 = 47 // .
+        let leftBracketKeyCode: UInt16 = 33 // [
+        let rightBracketKeyCode: UInt16 = 30 // ]
+        let tabKeyCode: UInt16 = 48  // Tab
+        let numberKeyCodes: [UInt16: Int] = [ // Cmd+1-9
+            18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9
+        ]
+
+        // Command-based shortcuts
         if modifiers.contains(.command) {
-            switch characters {
-            case "t":
-                return modifiers.contains(.shift) ? .newTabInBackground : .newTab
-            case "w":
-                return modifiers.contains(.option) ? .closeOtherTabs : .closeTab
-            case "k":
-                if modifiers.contains([.shift, .option]) {
-                    return .duplicateTabInBackground
-                } else if modifiers.contains(.shift) {
-                    return .duplicateTab
-                }
-            case "[":
-                return modifiers.contains(.shift) ? .previousTab : .goBack
-            case "]":
-                return modifiers.contains(.shift) ? .nextTab : .goForward
-            case "r":
-                return modifiers.contains(.shift) ? .reloadIgnoringCache : .reload
-            case "l":
+            // Cmd+T: New Tab
+            if keyCode == tKeyCode && characters == "t" && !modifiers.contains(.shift) {
+                return .newTab
+            }
+            // Cmd+Shift+T: New Tab in Background (or reopenClosedTab, context dependent)
+            if keyCode == tKeyCode && characters == "t" && modifiers.contains(.shift) {
+                return .newTabInBackground // Adjust if reopenClosedTab is needed
+            }
+            // Cmd+W: Close Tab
+            if keyCode == wKeyCode && characters == "w" && !modifiers.contains(.option) {
+                return .closeTab
+            }
+            // Cmd+Option+W: Close Other Tabs
+            if keyCode == wKeyCode && characters == "w" && modifiers.contains(.option) {
+                return .closeOtherTabs
+            }
+            // Cmd+Shift+K: Duplicate Tab
+            if keyCode == kKeyCode && characters == "k" && modifiers.contains(.shift) && !modifiers.contains(.option) {
+                return .duplicateTab
+            }
+            // Cmd+Shift+Option+K: Duplicate Tab in Background
+            if keyCode == kKeyCode && characters == "k" && modifiers.contains(.shift) && modifiers.contains(.option) {
+                return .duplicateTabInBackground
+            }
+            // Cmd+L: Focus Address Bar
+            if keyCode == lKeyCode && characters == "l" {
                 return .focusAddressBar
-            case "s":
-                return modifiers.contains(.shift) ? .toggleSidebar : nil
-            case ".":
+            }
+            // Cmd+Shift+S: Toggle Sidebar
+            if keyCode == sKeyCode && characters == "s" && modifiers.contains(.shift) {
+                return .toggleSidebar
+            }
+            // Cmd+R: Reload
+            if keyCode == rKeyCode && characters == "r" && !modifiers.contains(.shift) {
+                return .reload
+            }
+            // Cmd+Shift+R: Reload Ignoring Cache
+            if keyCode == rKeyCode && characters == "r" && modifiers.contains(.shift) {
+                return .reloadIgnoringCache
+            }
+            // Cmd+[: Go Back
+            if keyCode == leftBracketKeyCode && characters == "[" {
+                return .goBack
+            }
+            // Cmd+]: Go Forward
+            if keyCode == rightBracketKeyCode && characters == "]" {
+                return .goForward
+            }
+            // Cmd+.: Stop Loading
+            if keyCode == periodKeyCode && characters == "." {
                 return .stop
-            case "1"..."9":
-                if let number = Int(characters) {
-                    return .selectTab(number)
-                }
-            default:
-                break
             }
-            
-            // Special key codes
+            // Cmd+1-9: Select Tab
+            if let tabNumber = numberKeyCodes[keyCode] {
+                return .selectTab(tabNumber)
+            }
+        }
+
+        // Control-based shortcuts
+        if modifiers.contains(.control) && keyCode == tabKeyCode {
             if modifiers.contains(.shift) {
-                switch keyCode {
-                case 30: // ]
-                    return .nextTab
-                case 33: // [
-                    return .previousTab
-                default:
-                    break
-                }
+                return .previousTab // Ctrl+Shift+Tab
+            } else {
+                return .nextTab // Ctrl+Tab
             }
         }
-        
-        // Control key shortcuts
-        if modifiers.contains(.control) {
-            switch keyCode {
-            case 48: // Tab
-                return modifiers.contains(.shift) ? .previousTab : .nextTab
-            default:
-                break
+
+        // Additional Command+Shift shortcuts
+        if modifiers.contains(.command) && modifiers.contains(.shift) {
+            // Cmd+Shift+]: Next Tab
+            if keyCode == rightBracketKeyCode && characters == "]" {
+                return .nextTab
+            }
+            // Cmd+Shift+[: Previous Tab
+            if keyCode == leftBracketKeyCode && characters == "[" {
+                return .previousTab
             }
         }
-        
+
         return nil
     }
 }

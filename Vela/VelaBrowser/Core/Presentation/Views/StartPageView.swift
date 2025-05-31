@@ -12,142 +12,199 @@ struct StartPageView: View {
     @State private var searchText = ""
     @State private var showingBookmarks = false
     @State private var searchFocused = false
+    @State private var showContent = false
     
-    // Quick actions with clean, minimal design
+    // Clean, simple quick actions
     private var quickActions: [QuickAction] {
         [
-            QuickAction(title: "New Tab", icon: "plus", color: .primary, action: {
-                viewModel.createNewTab()
-            }),
-            QuickAction(title: "Bookmarks", icon: "heart", color: .primary, action: {
-                showingBookmarks = true
-            }),
-            QuickAction(title: "History", icon: "clock", color: .primary, action: {
-                print("Show history")
-            }),
-            QuickAction(title: "Downloads", icon: "arrow.down.circle", color: .primary, action: {
-                print("Show downloads")
-            })
+            QuickAction(
+                title: "New Tab",
+                icon: "plus",
+                color: .blue,
+                action: { viewModel.createNewTab() }
+            ),
+            QuickAction(
+                title: "Bookmarks",
+                icon: "heart",
+                color: .red,
+                action: { showingBookmarks = true }
+            ),
+            QuickAction(
+                title: "History",
+                icon: "clock",
+                color: .orange,
+                action: { print("Show history") }
+            ),
+            QuickAction(
+                title: "Downloads",
+                icon: "arrow.down.circle",
+                color: .green,
+                action: { print("Show downloads") }
+            ),
+            QuickAction(
+                title: "Settings",
+                icon: "gearshape",
+                color: .gray,
+                action: { print("Show settings") }
+            ),
+            QuickAction(
+                title: "Extensions",
+                icon: "puzzlepiece.extension",
+                color: .purple,
+                action: { print("Show extensions") }
+            )
         ]
     }
     
     private let frequentSites = [
-        FrequentSite(title: "GitHub", url: "https://github.com", favicon: "", color: .primary),
-        FrequentSite(title: "Stack Overflow", url: "https://stackoverflow.com", favicon: "", color: .primary),
-        FrequentSite(title: "Apple Developer", url: "https://developer.apple.com", favicon: "", color: .primary),
-        FrequentSite(title: "Swift.org", url: "https://swift.org", favicon: "", color: .primary),
-        FrequentSite(title: "Hacker News", url: "https://news.ycombinator.com", favicon: "", color: .primary),
-        FrequentSite(title: "Reddit", url: "https://reddit.com", favicon: "", color: .primary)
+        FrequentSite(title: "GitHub", url: "https://github.com", color: .black),
+        FrequentSite(title: "Stack Overflow", url: "https://stackoverflow.com", color: .orange),
+        FrequentSite(title: "Apple Developer", url: "https://developer.apple.com", color: .blue),
+        FrequentSite(title: "Swift.org", url: "https://swift.org", color: .orange),
+        FrequentSite(title: "Hacker News", url: "https://news.ycombinator.com", color: .orange),
+        FrequentSite(title: "Reddit", url: "https://reddit.com", color: .red)
     ]
     
     var body: some View {
         GeometryReader { geometry in
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    // Spacer for top padding
-                    Spacer()
-                        .frame(height: max(60, geometry.safeAreaInsets.top + 40))
-                    
-                    VStack(spacing: 48) {
-                        // Search section - Arc-style centered search
-                        VStack(spacing: 20) {
-                            // Simple, elegant title
-                            Text("Vela")
-                                .font(.system(size: 36, weight: .light, design: .default))
-                                .foregroundColor(.primary)
-                                .opacity(0.8)
-                            
-                            // Clean search bar
-                            HStack(spacing: 12) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.secondary)
-                                    .font(.system(size: 16, weight: .medium))
+            ZStack {
+                // Clean white background
+                Color.white
+                    .ignoresSafeArea(.all)
+                
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        Spacer()
+                            .frame(height: max(80, geometry.safeAreaInsets.top + 60))
+                        
+                        VStack(spacing: 48) {
+                            // Clean title section
+                            VStack(spacing: 24) {
+                                VStack(spacing: 12) {
+                                    Text("Vela")
+                                        .font(.system(size: 42, weight: .light, design: .default))
+                                        .foregroundColor(.black)
+                                        .opacity(showContent ? 1.0 : 0.0)
+                                        .animation(.easeOut(duration: 0.8).delay(0.2), value: showContent)
+                                    
+                                    Text("Navigate the web")
+                                        .font(.system(size: 16, weight: .regular))
+                                        .foregroundColor(.gray)
+                                        .opacity(showContent ? 1.0 : 0.0)
+                                        .animation(.easeOut(duration: 0.8).delay(0.4), value: showContent)
+                                }
                                 
-                                TextField("Search or enter address", text: $searchText)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                    .font(.system(size: 16, weight: .regular))
-                                    .onSubmit {
-                                        performSearch()
+                                // Clean search bar
+                                HStack(spacing: 12) {
+                                    Image(systemName: "magnifyingglass")
+                                        .foregroundColor(.gray)
+                                        .font(.system(size: 16, weight: .medium))
+                                    
+                                    TextField("Search or enter address", text: $searchText)
+                                        .textFieldStyle(PlainTextFieldStyle())
+                                        .font(.system(size: 16, weight: .regular))
+                                        .foregroundColor(.black)
+                                        .onSubmit {
+                                            performSearch()
+                                        }
+                                    
+                                    if !searchText.isEmpty {
+                                        Button(action: {
+                                            withAnimation(.easeInOut(duration: 0.2)) {
+                                                searchText = ""
+                                            }
+                                        }) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundColor(.gray)
+                                                .font(.system(size: 14))
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .transition(.scale.combined(with: .opacity))
                                     }
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 16)
+                                .background(Color.gray.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                                )
+                                .opacity(showContent ? 1.0 : 0.0)
+                                .offset(y: showContent ? 0 : 10)
+                                .animation(.easeOut(duration: 0.6).delay(0.6), value: showContent)
+                            }
+                            
+                            // Quick Actions
+                            VStack(alignment: .leading, spacing: 20) {
+                                HStack {
+                                    Text("Quick Actions")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundColor(.black)
+                                    Spacer()
+                                }
+                                .opacity(showContent ? 1.0 : 0.0)
+                                .animation(.easeOut(duration: 0.6).delay(0.8), value: showContent)
                                 
-                                if !searchText.isEmpty {
-                                    Button(action: { searchText = "" }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.secondary)
-                                            .font(.system(size: 14))
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
+                                    ForEach(Array(quickActions.enumerated()), id: \.element.title) { index, action in
+                                        QuickActionCard(action: action)
+                                            .opacity(showContent ? 1.0 : 0.0)
+                                            .offset(y: showContent ? 0 : 20)
+                                            .animation(.easeOut(duration: 0.5).delay(1.0 + Double(index) * 0.1), value: showContent)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: 600)
+                            
+                            // Frequent Sites
+                            VStack(alignment: .leading, spacing: 20) {
+                                HStack {
+                                    Text("Frequently Visited")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundColor(.black)
+                                    
+                                    Spacer()
+                                    
+                                    Button("View All") {
+                                        showingBookmarks = true
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.gray.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(NSColor.controlBackgroundColor))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
-                                    )
-                            )
-                            .frame(maxWidth: 480)
-                        }
-                        
-                        // Quick Actions - Arc-style minimal grid
-                        VStack(alignment: .leading, spacing: 20) {
-                            HStack {
-                                Text("Quick Actions")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.primary)
-                                    .opacity(0.8)
-                                Spacer()
-                            }
-                            
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
-                                ForEach(quickActions, id: \.title) { action in
-                                    QuickActionCard(action: action)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: 600)
-                        
-                        // Frequent Sites - Clean grid layout
-                        VStack(alignment: .leading, spacing: 20) {
-                            HStack {
-                                Text("Frequently Visited")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.primary)
-                                    .opacity(0.8)
+                                .opacity(showContent ? 1.0 : 0.0)
+                                .animation(.easeOut(duration: 0.6).delay(1.4), value: showContent)
                                 
-                                Spacer()
-                                
-                                Button("View All") {
-                                    showingBookmarks = true
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.secondary)
-                            }
-                            
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 20) {
-                                ForEach(Array(frequentSites.prefix(6).enumerated()), id: \.element.url) { index, site in
-                                    FrequentSiteCard(site: site) {
-                                        navigateToSite(site.url)
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: 3), spacing: 20) {
+                                    ForEach(Array(frequentSites.prefix(6).enumerated()), id: \.element.url) { index, site in
+                                        FrequentSiteCard(site: site) {
+                                            navigateToSite(site.url)
+                                        }
+                                        .opacity(showContent ? 1.0 : 0.0)
+                                        .offset(y: showContent ? 0 : 20)
+                                        .animation(.easeOut(duration: 0.5).delay(1.6 + Double(index) * 0.1), value: showContent)
                                     }
                                 }
                             }
+                            .frame(maxWidth: 600)
+                            
+                            Spacer()
+                                .frame(height: 80)
                         }
-                        .frame(maxWidth: 600)
-                        
-                        Spacer()
-                            .frame(height: 100)
+                        .padding(.horizontal, 32)
                     }
-                    .padding(.horizontal, 32)
                 }
             }
-            .background(Color(NSColor.windowBackgroundColor))
         }
-        .onTapGesture {
-            searchFocused = false
+        .onAppear {
+            withAnimation {
+                showContent = true
+            }
         }
         .sheet(isPresented: $showingBookmarks) {
             // BookmarkListView()
@@ -174,8 +231,10 @@ struct StartPageView: View {
             }
         }
         
-        searchText = ""
-        searchFocused = false
+        withAnimation(.easeInOut(duration: 0.3)) {
+            searchText = ""
+            searchFocused = false
+        }
     }
     
     private func navigateToSite(_ urlString: String) {
@@ -189,48 +248,53 @@ struct StartPageView: View {
     }
 }
 
-// MARK: - Clean Quick Action Card (Arc-style)
+// MARK: - Clean Quick Action Card
 
 struct QuickActionCard: View {
     let action: QuickAction
     @State private var isHovered = false
     
     var body: some View {
-        VStack(spacing: 12) {
-            // Simple icon
-            Image(systemName: action.icon)
-                .font(.system(size: 20, weight: .medium))
-                .foregroundColor(.primary)
-                .opacity(0.7)
-            
-            Text(action.title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.primary)
-                .opacity(0.8)
-                .multilineTextAlignment(.center)
+        Button(action: action.action) {
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(action.color.opacity(0.1))
+                        .frame(width: 48, height: 48)
+                    
+                    Image(systemName: action.icon)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(action.color)
+                }
+                .scaleEffect(isHovered ? 1.1 : 1.0)
+                
+                Text(action.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.black)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(isHovered ? 0.25 : 0.15), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(isHovered ? 0.08 : 0.04), radius: isHovered ? 8 : 4, x: 0, y: isHovered ? 4 : 2)
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isHovered)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isHovered ? Color(NSColor.controlAccentColor).opacity(0.1) : Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
-                )
-        )
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
-        .onTapGesture {
-            action.action()
-        }
+        .buttonStyle(PlainButtonStyle())
         .onHover { hovering in
             isHovered = hovering
         }
     }
 }
 
-// MARK: - Clean Frequent Site Card with Favicon
+// MARK: - Clean Frequent Site Card
 
 struct FrequentSiteCard: View {
     let site: FrequentSite
@@ -239,60 +303,54 @@ struct FrequentSiteCard: View {
     @StateObject private var faviconLoader = FaviconLoader()
     
     var body: some View {
-        VStack(spacing: 12) {
-            // Favicon container
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(NSColor.controlBackgroundColor))
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Group {
-                        if faviconLoader.isLoading {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                                .progressViewStyle(CircularProgressViewStyle())
-                        } else if let favicon = faviconLoader.image {
-                            Image(nsImage: favicon)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                        } else {
-                            // Fallback to first letter
-                            Text(String(site.title.prefix(1)))
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.primary)
-                                .opacity(0.7)
-                        }
+        Button(action: onTap) {
+            VStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(site.color.opacity(0.1))
+                        .frame(width: 48, height: 48)
+                    
+                    if let favicon = faviconLoader.image {
+                        Image(nsImage: favicon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    } else {
+                        Text(String(site.title.prefix(1)))
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(site.color)
                     }
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
-                )
-            
-            VStack(spacing: 4) {
-                Text(site.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                }
+                .scaleEffect(isHovered ? 1.1 : 1.0)
                 
-                Text(URL(string: site.url)?.host ?? site.url)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                VStack(spacing: 4) {
+                    Text(site.title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.black)
+                        .lineLimit(1)
+                    
+                    Text(URL(string: site.url)?.host ?? site.url)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.gray)
+                        .lineLimit(1)
+                }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(isHovered ? 0.25 : 0.15), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(isHovered ? 0.08 : 0.04), radius: isHovered ? 8 : 4, x: 0, y: isHovered ? 4 : 2)
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isHovered)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isHovered ? Color(NSColor.controlAccentColor).opacity(0.1) : Color.clear)
-        )
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
-        .onTapGesture {
-            onTap()
-        }
+        .buttonStyle(PlainButtonStyle())
         .onHover { hovering in
             isHovered = hovering
         }
@@ -302,7 +360,7 @@ struct FrequentSiteCard: View {
     }
 }
 
-// MARK: - Favicon Loader (Simplified)
+// MARK: - Favicon Loader
 
 class FaviconLoader: ObservableObject {
     @Published var image: NSImage?
@@ -319,7 +377,6 @@ class FaviconLoader: ObservableObject {
         
         isLoading = true
         
-        // Use Google's favicon service for reliability
         let faviconURL = "https://www.google.com/s2/favicons?domain=\(host)&sz=32"
         
         guard let url = URL(string: faviconURL) else {
@@ -340,7 +397,7 @@ class FaviconLoader: ObservableObject {
     }
 }
 
-// MARK: - Data Models (Simplified)
+// MARK: - Data Models
 
 struct QuickAction {
     let title: String
@@ -352,6 +409,5 @@ struct QuickAction {
 struct FrequentSite {
     let title: String
     let url: String
-    let favicon: String
     let color: Color
 }

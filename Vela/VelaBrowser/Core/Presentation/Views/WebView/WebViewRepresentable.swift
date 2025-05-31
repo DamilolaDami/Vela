@@ -7,29 +7,43 @@ struct WebViewRepresentable: NSViewRepresentable {
     @Binding var estimatedProgress: Double
     let browserViewModel: BrowserViewModel // Add this reference
 
+  
     func makeNSView(context: Context) -> WKWebView {
         let webView: WKWebView
-        
-        if let existingWebView = tab.webView {
+
+        if let existingWebView = tab.webView as? AudioObservingWebView {
             webView = existingWebView
+            existingWebView.startObservingAudio()
         } else {
             let configuration = WKWebViewConfiguration()
+            
+            // Enable JavaScript and full-screen APIs
             configuration.defaultWebpagePreferences.allowsContentJavaScript = true
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
             configuration.preferences.isFraudulentWebsiteWarningEnabled = false
-            configuration.allowsAirPlayForMediaPlayback = true // Enable AirPlay
-            configuration.mediaTypesRequiringUserActionForPlayback = [] // Allow auto-play
             
-            webView = WKWebView(frame: .zero, configuration: configuration)
-            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-            webView.allowsBackForwardNavigationGestures = true
+            // Enable media playback features
+            configuration.allowsAirPlayForMediaPlayback = true
+            configuration.mediaTypesRequiringUserActionForPlayback = [] // Allow autoplay and full-screen without user gesture
             
-            tab.webView = webView
+            
+            // Additional settings for macOS
+            if #available(macOS 11.3, *) {
+                configuration.upgradeKnownHostsToHTTPS = false
+            }
+
+            let audioWebView = AudioObservingWebView(frame: .zero, configuration: configuration)
+            audioWebView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            audioWebView.allowsBackForwardNavigationGestures = true
+            audioWebView.startObservingAudio()
+
+            tab.setWebView(audioWebView)
+            webView = audioWebView
         }
 
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
-        
+
         #if DEBUG
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         #endif

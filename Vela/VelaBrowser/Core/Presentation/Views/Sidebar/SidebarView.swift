@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @ObservedObject var viewModel: BrowserViewModel
+    @ObservedObject var previewManager: TabPreviewManager
     @State private var hoveredTab: UUID?
     
     var body: some View {
@@ -11,15 +12,10 @@ struct SidebarView: View {
             
             ScrollView {
                 VStack(spacing: 24) {
-                    // Quick Access Grid
                     QuickAccessGrid(viewModel: viewModel)
-                    
-                    
                     SpaceInfoSection(viewModel: viewModel)
-                    
-                    // Tabs Section (without space divider)
                     TabsSection(
-                        viewModel: viewModel,
+                        viewModel: viewModel, previewManager: previewManager,
                         hoveredTab: $hoveredTab
                     )
                 }
@@ -27,23 +23,37 @@ struct SidebarView: View {
                 .padding(.top, 16)
             }
             
-            // Bottom Actions
             BottomActions(viewModel: viewModel)
         }
-        .background(Color(NSColor.controlBackgroundColor))
-        .sheet(isPresented: $viewModel.isShowingCreateSpaceSheet, content: {
-            SpaceCreationSheet(viewModel: viewModel)
-        })
+        .background(
+            LinearGradient(
+                stops: [
+                    Gradient.Stop(color: currentSpaceColor.opacity(0.4), location: 0.0),
+                    Gradient.Stop(color: currentSpaceColor.opacity(0.2), location: 0.3),
+                    Gradient.Stop(color: currentSpaceColor.opacity(0.2), location: 0.7),
+                    Gradient.Stop(color: currentSpaceColor.opacity(0.1), location: 1.0),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
         .overlay(
-            // Subtle border
+            // Colored border instead of gray
             Rectangle()
-                .fill(Color(NSColor.separatorColor))
-                .frame(width: 0.5)
+                .fill(currentSpaceColor.opacity(0.15))
+                .frame(width: 1)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         )
+        .sheet(isPresented: $viewModel.isShowingCreateSpaceSheet) {
+            SpaceCreationSheet(viewModel: viewModel)
+        }
+    }
+    
+    private var currentSpaceColor: Color {
+        guard let space = viewModel.currentSpace else { return .blue }
+        return Color.spaceColor(space.color)
     }
 }
-
 
 // MARK: - Space Info Section (moved from SpaceDivider)
 struct SpaceInfoSection: View {
@@ -89,10 +99,20 @@ struct SpaceInfoSection: View {
     }
 }
 
-// MARK: - Tabs Section (simplified without space divider)
+// MARK: - Tabs Section 
 struct TabsSection: View {
     @ObservedObject var viewModel: BrowserViewModel
+    @ObservedObject var previewManager: TabPreviewManager
     @Binding var hoveredTab: UUID?
+    
+    // Computed properties to separate pinned and regular tabs
+    private var pinnedTabs: [Tab] {
+        viewModel.tabs.filter { $0.isPinned }
+    }
+    
+    private var regularTabs: [Tab] {
+        viewModel.tabs.filter { !$0.isPinned }
+    }
     
     var body: some View {
         VStack(spacing: 8) {
@@ -101,25 +121,57 @@ struct TabsSection: View {
                 viewModel.createNewTab()
             }
             
-            // Tab List
-            ForEach(viewModel.tabs) { tab in
-                            TabRow(
-                                viewModel: viewModel,
-                                tab: tab,
-                                isSelected: tab.id == viewModel.currentTab?.id,
-                                isHovered: hoveredTab == tab.id,
-                                onSelect: { viewModel.selectTab(tab) },
-                                onClose: { viewModel.closeAndDeleteTab(tab) }, // Use closeAndDeleteTab
-                                onHover: { isHovering in
-                                    hoveredTab = isHovering ? tab.id : nil
-                                }
-                            )
-                        }
+            // Pinned Tabs Section (if any exist)
+            if !pinnedTabs.isEmpty {
+                VStack(spacing: 4) {
+                    // Optional: Pinned tabs header
+                    HStack {
+                        Text("Pinned")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
-                    .id(viewModel.currentSpace?.id)
+                    .padding(.horizontal, 12)
+                    
+                    // Pinned tabs list
+                    ForEach(pinnedTabs) { tab in
+                        PinnedTabRow(
+                            viewModel: viewModel,
+                            tab: tab,
+                            isSelected: tab.id == viewModel.currentTab?.id,
+                            isHovered: hoveredTab == tab.id,
+                            onSelect: { viewModel.selectTab(tab) },
+                            onHover: { isHovering in
+                                hoveredTab = isHovering ? tab.id : nil
+                            }
+                        )
+                    }
+                }
+                
+                // Divider between pinned and regular tabs
+                Divider()
+                    .padding(.horizontal, 12)
+            }
+            
+            // Regular Tabs Section
+            ForEach(regularTabs) { tab in
+                TabRow(
+                    viewModel: viewModel,
+                    previewManager: previewManager,
+                    tab: tab,
+                    isSelected: tab.id == viewModel.currentTab?.id,
+                    isHovered: hoveredTab == tab.id,
+                    onSelect: { viewModel.selectTab(tab) },
+                    onClose: { viewModel.closeAndDeleteTab(tab) },
+                    onHover: { isHovering in
+                        hoveredTab = isHovering ? tab.id : nil
+                    }
+                )
+            }
+        }
+        .id(viewModel.currentSpace?.id)
     }
 }
-
 struct NewTabButton: View {
     let action: () -> Void
     @State private var isHovered = false

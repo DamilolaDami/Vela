@@ -69,52 +69,59 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
     }
 
     // MARK: - KVO (unchanged)
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-            guard let webView = object as? WKWebView,
-                  webView == self.webView,
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        guard let webView = object as? WKWebView,
+              webView == self.webView,
+              let parent = self.parent,
+              parent.tab.id == self.tabId else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
                   let parent = self.parent,
                   parent.tab.id == self.tabId else { return }
 
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self,
-                      let parent = self.parent,
-                      parent.tab.id == self.tabId else { return }
-                
-                let tab = parent.tab
-                var tabUpdated = false // Track if tab was modified
-                
-                switch keyPath {
-                case #keyPath(WKWebView.isLoading):
-                    let loading = webView.isLoading
-                    tab.isLoading = loading
-                    parent.isLoading = loading
+            let tab = parent.tab
+            var tabUpdated = false
+            
+            switch keyPath {
+            case #keyPath(WKWebView.isLoading):
+                let loading = webView.isLoading
+                tab.isLoading = loading
+                parent.isLoading = loading
+                tabUpdated = true
+            case #keyPath(WKWebView.estimatedProgress):
+                parent.estimatedProgress = webView.estimatedProgress
+            case #keyPath(WKWebView.title):
+                if let newTitle = webView.title, !newTitle.isEmpty, tab.title != newTitle {
+                    tab.title = newTitle
                     tabUpdated = true
-                case #keyPath(WKWebView.estimatedProgress):
-                    parent.estimatedProgress = webView.estimatedProgress
-                case #keyPath(WKWebView.title):
-                    if let newTitle = webView.title, !newTitle.isEmpty, tab.title != newTitle {
-                        tab.title = newTitle
-                        tabUpdated = true
-                    } else if webView.title?.isEmpty == true || webView.title == nil {
-                        tab.title = "Untitled"
-                        tabUpdated = true
-                    }
-                case #keyPath(WKWebView.url):
-                    if let newURL = webView.url, tab.url != newURL {
-                        tab.url = newURL
-                        self.lastRequestedURL = newURL
-                        tabUpdated = true
-                    }
-                default:
-                    break
+                } else if webView.title?.isEmpty == true || webView.title == nil {
+                    tab.title = "Untitled"
+                    tabUpdated = true
                 }
-                
-                // Notify BrowserViewModel if tab was updated
-                if tabUpdated {
-                    self.browserViewModel?.updateTab(tab)
+            case #keyPath(WKWebView.url):
+                if let newURL = webView.url, tab.url != newURL {
+                    tab.url = newURL
+                    self.lastRequestedURL = newURL
+                    tabUpdated = true
+                }
+            default:
+                break
+            }
+            if let audioWebView = webView as? AudioObservingWebView {
+                let isAudioPlaying = audioWebView.isPlayingAudioPrivate
+                if tab.isPlayingAudio != isAudioPlaying {
+                    tab.isPlayingAudio = isAudioPlaying
+                    print("🎧 Audio state updated via _isPlayingAudio: \(isAudioPlaying)")
                 }
             }
+
+            if tabUpdated {
+                self.browserViewModel?.updateTab(tab)
+            }
         }
+    }
+
     // MARK: - WKNavigationDelegate
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard webView == self.webView,
@@ -140,6 +147,27 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         
         if pendingNavigation == navigation {
             pendingNavigation = nil
+        }
+        
+        // Inject JavaScript to ensure full-screen API is available
+        let fullscreenScript = """
+        (function() {
+            var element = document.documentElement;
+            if (element.requestFullscreen) {
+                element.requestFullscreen = element.requestFullscreen ||
+                    element.webkitRequestFullscreen ||
+                    element.mozRequestFullScreen ||
+                    element.msRequestFullscreen ||
+                    function() { return Promise.reject(new Error('Fullscreen API is not supported')); };
+            }
+        })();
+        """
+        webView.evaluateJavaScript(fullscreenScript) { _, error in
+            if let error = error {
+                print("Error injecting fullscreen script: \(error)")
+            } else {
+                print("Fullscreen script injected successfully")
+            }
         }
         
         DispatchQueue.main.async { [weak self] in
@@ -414,47 +442,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
     }
 }
 
-// MARK: - FIXED WebView Configuration
-extension WebViewRepresentable {
-    func makeNSViewWithDownloadSupport(context: Context) -> WKWebView {
-        let webView: WKWebView
-        
-        if let existingWebView = tab.webView {
-            webView = existingWebView
-        } else {
-            let configuration = WKWebViewConfiguration()
-            
-            // Essential configuration for downloads
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-            configuration.preferences.isFraudulentWebsiteWarningEnabled = false
-            
-            // CRITICAL: This enables downloads in macOS
-            if #available(macOS 11.3, *) {
-                configuration.upgradeKnownHostsToHTTPS = false
-            }
-            
-            webView = WKWebView(frame: .zero, configuration: configuration)
-            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-            webView.allowsBackForwardNavigationGestures = true
-            
-            tab.webView = webView
-        }
 
-        // CRITICAL: Set delegates BEFORE loading any content
-        webView.navigationDelegate = context.coordinator
-        webView.uiDelegate = context.coordinator
-
-        #if DEBUG
-        webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        #endif
-
-        context.coordinator.addObservers(to: webView)
-        
-        print("🌐 WebView configured with download support")
-        return webView
-    }
-}
 
 // MARK: - FIXED BrowserViewModel Extension
 extension BrowserViewModel {
