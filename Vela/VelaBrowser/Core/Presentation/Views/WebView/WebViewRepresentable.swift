@@ -1,6 +1,108 @@
 import SwiftUI
 import WebKit
 
+// MARK: - Custom WKWebView with contextual menu support
+class CustomAudioObservingWebView: AudioObservingWebView {
+    
+    // Property to track the custom action selected from contextual menu
+    var contextualMenuAction: ContextualMenuAction?
+    weak var browserViewModel: BrowserViewModel?
+    
+    // Define custom actions
+    enum ContextualMenuAction {
+        case openInNewTab
+        case openInNewWindow
+        // Add other actions as needed
+    }
+    
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        
+        var items = menu.items
+        
+        // Find and modify existing menu items
+        for idx in (0..<items.count).reversed() {
+            if let id = items[idx].identifier?.rawValue {
+                // Check for link-related menu items
+                if id == "WKMenuItemIdentifierOpenLinkInNewWindow" {
+                    // Create "Open in New Tab" menu item
+                    let action = #selector(processMenuItem(_:))
+                    let tabMenuItem = NSMenuItem(title: "Open Link in New Tab", action: action, keyEquivalent: "")
+                    tabMenuItem.identifier = NSUserInterfaceItemIdentifier("openLinkInNewTab")
+                    tabMenuItem.target = self
+                    tabMenuItem.representedObject = items[idx]
+                    
+                    // Insert the new menu item right after the original
+                    items.insert(tabMenuItem, at: idx + 1)
+                }
+                
+                // You can also handle images and other elements
+                else if id == "WKMenuItemIdentifierOpenImageInNewWindow" {
+                    let action = #selector(processMenuItem(_:))
+                    let tabMenuItem = NSMenuItem(title: "Open Image in New Tab", action: action, keyEquivalent: "")
+                    tabMenuItem.identifier = NSUserInterfaceItemIdentifier("openImageInNewTab")
+                    tabMenuItem.target = self
+                    tabMenuItem.representedObject = items[idx]
+                    items.insert(tabMenuItem, at: idx + 1)
+                }
+                
+                // Handle media (videos)
+                else if id == "WKMenuItemIdentifierOpenMediaInNewWindow" {
+                    let action = #selector(processMenuItem(_:))
+                    let tabMenuItem = NSMenuItem(title: "Open Video in New Tab", action: action, keyEquivalent: "")
+                    tabMenuItem.identifier = NSUserInterfaceItemIdentifier("openMediaInNewTab")
+                    tabMenuItem.target = self
+                    tabMenuItem.representedObject = items[idx]
+                    items.insert(tabMenuItem, at: idx + 1)
+                }
+                
+                // Optional: Remove download options if you don't want them
+                /*
+                else if id == "WKMenuItemIdentifierDownloadLinkedFile" ||
+                        id == "WKMenuItemIdentifierDownloadImage" ||
+                        id == "WKMenuItemIdentifierDownloadMedia" {
+                    items.remove(at: idx)
+                }
+                */
+            }
+        }
+        
+        // Update the menu with our modifications
+        menu.items = items
+    }
+    
+    @objc func processMenuItem(_ menuItem: NSMenuItem) {
+        // Reset the action
+        self.contextualMenuAction = nil
+        
+        guard let originalMenuItem = menuItem.representedObject as? NSMenuItem else { return }
+        
+        // Determine which custom action was selected
+        if let identifier = menuItem.identifier?.rawValue {
+            switch identifier {
+            case "openLinkInNewTab", "openImageInNewTab", "openMediaInNewTab":
+                self.contextualMenuAction = .openInNewTab
+            default:
+                break
+            }
+        }
+        
+        // Trigger the original menu item's action to get the URL
+        if let action = originalMenuItem.action {
+            originalMenuItem.target?.perform(action, with: originalMenuItem)
+        }
+    }
+    
+    override func didCloseMenu(_ menu: NSMenu, with event: NSEvent?) {
+        super.didCloseMenu(menu, with: event)
+        
+        // Clear the action after a delay to ensure the navigation delegate has time to process
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            self.contextualMenuAction = nil
+        }
+    }
+}
+
 struct WebViewRepresentable: NSViewRepresentable {
     @ObservedObject var tab: Tab
     @Binding var isLoading: Bool
@@ -10,7 +112,7 @@ struct WebViewRepresentable: NSViewRepresentable {
   
     func makeNSView(context: Context) -> WKWebView {
         let webView: WKWebView
-        if let existingWebView = tab.webView as? AudioObservingWebView {
+        if let existingWebView = tab.webView as? CustomAudioObservingWebView {
             webView = existingWebView
             existingWebView.startObservingAudio()
         } else {
@@ -21,6 +123,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             configuration.allowsAirPlayForMediaPlayback = true
             configuration.mediaTypesRequiringUserActionForPlayback = []
             configuration.preferences.setValue(true, forKey: "fullScreenEnabled")
+            
             
             // FIXED: Proper data store configuration
             if browserViewModel.isIncognitoMode {
@@ -88,11 +191,16 @@ struct WebViewRepresentable: NSViewRepresentable {
                 configuration.upgradeKnownHostsToHTTPS = false
             }
 
-            let audioWebView = AudioObservingWebView(frame: .zero, configuration: configuration)
+            // UPDATED: Use CustomAudioObservingWebView instead of AudioObservingWebView
+            let audioWebView = CustomAudioObservingWebView(frame: .zero, configuration: configuration)
             audioWebView.autoresizingMask = [.width, .height]
             audioWebView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
             audioWebView.allowsBackForwardNavigationGestures = true
             audioWebView.startObservingAudio()
+            
+            // IMPORTANT: Set the browserViewModel reference for contextual menu
+            audioWebView.browserViewModel = browserViewModel
+            
             tab.setWebView(audioWebView)
             webView = audioWebView
         }
@@ -130,10 +238,10 @@ struct WebViewRepresentable: NSViewRepresentable {
                 if self.browserViewModel.isFullScreen != (nsView.window?.styleMask.contains(.fullScreen) ?? false) {
                     if let window = nsView.window {
                         nsView.frame = window.contentView?.bounds ?? nsView.frame
-                        print("WebView frame updated during full-screen transition: \(nsView.frame)")
+                     
                     }
                 } else {
-                    print("WebView frame unchanged: \(nsView.frame)")
+                  
                 }
             }
         }

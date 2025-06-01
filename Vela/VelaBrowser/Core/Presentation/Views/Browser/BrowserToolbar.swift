@@ -112,22 +112,28 @@ struct BrowserToolbar: View {
     // MARK: - Actions
     
     private func goBack() {
-        // TODO: Implement navigation back
-        //  viewModel.currentTab?.goBack()
+        guard let currentTab = viewModel.currentTab, canGoBack else {
+            print("⚠️ Cannot go back: No tab or navigation history available")
+            return
+        }
+       // currentTab.goBack()
     }
-    
+
     private func goForward() {
-        // TODO: Implement navigation forward
-        // viewModel.currentTab?.goForward()
+        guard let currentTab = viewModel.currentTab, canGoForward else {
+            print("⚠️ Cannot go forward: No tab or navigation history available")
+            return
+        }
+      //  currentTab.goForward()
     }
     
     private func refresh() {
         if viewModel.isLoading {
-            // TODO: Stop loading
-            //   viewModel.currentTab?.stopLoading()
+          
+          //     viewModel.currentTab?.stopLoading()
         } else {
-            // TODO: Reload page
-            //   viewModel.currentTab?.reload()
+           
+          //     viewModel.currentTab?.reload()
         }
     }
     

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct VelaCommands: Commands {
     let appDelegate: VelaAppDelegate
+    @ObservedObject var bookMarkViewModel: BookmarkViewModel
+    @ObservedObject var browserViewModel: BrowserViewModel
     
     var body: some Commands {
         // File Menu
@@ -206,56 +208,118 @@ struct VelaCommands: Commands {
         
         // Bookmarks Menu
         CommandMenu("Bookmarks") {
+            // Add Bookmark
             Button("Add Bookmark...") {
-                // TODO: Implement add bookmark
+                appDelegate.addBookmark(nil)
             }
             .keyboardShortcut("d", modifiers: .command)
             
+            // Show All Bookmarks
             Button("Show All Bookmarks") {
-                // TODO: Implement show all bookmarks
+                appDelegate.showAllBookmarks(nil)
             }
             .keyboardShortcut("b", modifiers: [.command, .shift])
             
             Divider()
             
-            Button("Bookmark All Tabs...") {
-                // TODO: Implement bookmark all tabs
+            // Bookmarks and Folders
+            ForEach(bookMarkViewModel.folders.filter { $0.parentFolderId == nil }) { folder in
+                Menu(folder.title) {
+                    // Recursively build submenu for nested folders and bookmarks
+                    BookmarkSubMenu(
+                        folderId: folder.id,
+                        bookmarks: bookMarkViewModel.bookmarks,
+                        folders: bookMarkViewModel.folders,
+                        action: { bookmark in
+                        appDelegate.bookmarkViewModel?.currentSelectedBookMark = bookmark
+                        appDelegate.openBookmark(bookmark)
+                        }
+                    )
+                }
             }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
             
-            Button("Import Bookmarks...") {
-                // TODO: Implement import bookmarks
-            }
-            
-            Button("Export Bookmarks...") {
-                // TODO: Implement export bookmarks
+            // Bookmarks not in any folder
+            Section {
+                ForEach(bookMarkViewModel.bookmarks.filter { $0.folderId == nil && !$0.isFolder }) { bookmark in
+                    Button(bookmark.title) {
+                        appDelegate.bookmarkViewModel?.currentSelectedBookMark = bookmark
+                        appDelegate.openBookmark(bookmark)
+                    }
+                    .disabled(bookmark.url == nil)
+                }
             }
             
             Divider()
             
-            Button("Organize Bookmarks...") {
-                // TODO: Implement organize bookmarks
+            // Bookmark All Tabs
+            Button("Bookmark All Tabs...") {
+                appDelegate.bookmarkAllTabs(nil)
+            }
+            .keyboardShortcut("d", modifiers: [.command, .shift])
+            
+            // Import Bookmarks
+            Button("Import Bookmarks...") {
+                appDelegate.importBookmarks(nil)
             }
             
+            // Export Bookmarks
+            Button("Export Bookmarks...") {
+                appDelegate.exportBookmarks(nil)
+            }
+            
+            Divider()
+            
+            // Organize Bookmarks
+            Button("Organize Bookmarks...") {
+                appDelegate.organizeBookmarks(nil)
+            }
+            
+            // Add Bookmark Folder
             Button("Add Bookmark Folder...") {
-                // TODO: Implement add bookmark folder
+                appDelegate.addBookmarkFolder(nil)
             }
         }
         
         // Spaces Menu
         CommandMenu("Spaces") {
+            // Picker for selecting a space
+            Picker("Select Space", selection: Binding(
+                get: { browserViewModel.currentSpace?.id ?? UUID() },
+                set: { newValue in
+                    if let selectedSpace = browserViewModel.spaces.first(where: { $0.id == newValue }) {
+                        browserViewModel.selectSpace(selectedSpace)
+                    }
+                }
+            )) {
+                ForEach(browserViewModel.spaces) { space in
+                    Text(space.name)
+                        .tag(space.id)
+                }
+            }
+            .pickerStyle(.inline)
+
+            Divider()
+
             Button("New Space") {
-                // TODO: Implement new space
+                browserViewModel.isShowingCreateSpaceSheet = true
             }
             .keyboardShortcut("n", modifiers: [.command, .control])
             
             Button("Switch to Next Space") {
-                // TODO: Implement switch to next space
+                if let current = browserViewModel.currentSpace,
+                   let currentIndex = browserViewModel.spaces.firstIndex(where: { $0.id == current.id }),
+                   currentIndex + 1 < browserViewModel.spaces.count {
+                    browserViewModel.selectSpace(browserViewModel.spaces[currentIndex + 1])
+                }
             }
             .keyboardShortcut(.rightArrow, modifiers: [.command, .control])
             
             Button("Switch to Previous Space") {
-                // TODO: Implement switch to previous space
+                if let current = browserViewModel.currentSpace,
+                   let currentIndex = browserViewModel.spaces.firstIndex(where: { $0.id == current.id }),
+                   currentIndex > 0 {
+                    browserViewModel.selectSpace(browserViewModel.spaces[currentIndex - 1])
+                }
             }
             .keyboardShortcut(.leftArrow, modifiers: [.command, .control])
             
@@ -273,12 +337,18 @@ struct VelaCommands: Commands {
             Divider()
             
             Button("Rename Current Space...") {
-                // TODO: Implement rename current space
+                if let currentSpace = browserViewModel.currentSpace {
+                    browserViewModel.spaceForInfoPopover = currentSpace
+                    browserViewModel.isShowingSpaceInfoPopover = true
+                }
             }
             
             Button("Delete Current Space") {
-                // TODO: Implement delete current space
+                if let currentSpace = browserViewModel.currentSpace, !currentSpace.isDefault {
+                    browserViewModel.deleteSpace(currentSpace)
+                }
             }
+            .disabled(browserViewModel.currentSpace?.isDefault ?? true)
             
             Divider()
             
@@ -287,29 +357,6 @@ struct VelaCommands: Commands {
             }
             .keyboardShortcut("s", modifiers: [.command, .control])
         }
-        
-        // Downloads Menu
-        CommandMenu("Downloads") {
-            Button("Show Downloads") {
-                // TODO: Implement show downloads
-            }
-            .keyboardShortcut("j", modifiers: .command)
-            
-            Button("Clear Completed Downloads") {
-                // TODO: Implement clear completed downloads
-            }
-            
-            Divider()
-            
-            Button("Pause All Downloads") {
-                // TODO: Implement pause all downloads
-            }
-            
-            Button("Resume All Downloads") {
-                // TODO: Implement resume all downloads
-            }
-        }
-        
         // Tools Menu
         CommandMenu("Tools") {
             Button("Open Developer Tools") {
@@ -372,6 +419,36 @@ struct VelaCommands: Commands {
             Button("Bring All to Front") {
                 // TODO: Implement bring all to front
             }
+        }
+    }
+}
+
+
+struct BookmarkSubMenu: View {
+    let folderId: UUID?
+    let bookmarks: [Bookmark]
+    let folders: [Bookmark]
+    let action: (Bookmark) -> Void
+    
+    var body: some View {
+        // Subfolders
+        ForEach(folders.filter { $0.parentFolderId == folderId }) { folder in
+            Menu(folder.title) {
+                BookmarkSubMenu(
+                    folderId: folder.id,
+                    bookmarks: bookmarks,
+                    folders: folders,
+                    action: action
+                )
+            }
+        }
+        
+        // Bookmarks in this folder
+        ForEach(bookmarks.filter { $0.folderId == folderId && !$0.isFolder }) { bookmark in
+            Button(bookmark.title) {
+                action(bookmark)
+            }
+            .disabled(bookmark.url == nil)
         }
     }
 }

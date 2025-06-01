@@ -175,7 +175,7 @@ struct TabRow: View {
         }
         // Simplified hover detection using onHover modifier
         .onHover { hovering in
-            print("🐛 onHover triggered for \(tab.title): \(hovering)")
+           
             
             if hovering {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -297,9 +297,6 @@ struct TabContextMenu: View {
             
             Button("Close Tab") {
                 viewModel.closeTab(tab)
-            }
-            Button("Close and Delete Tab") {
-                viewModel.closeAndDeleteTab(tab)
             }
             
             Button("Close Other Tabs") {

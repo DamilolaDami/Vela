@@ -21,6 +21,7 @@ class BookmarkViewModel: ObservableObject {
     @Published var isShowingCreateFolderSheet: Bool = false
     @Published var bookmarkToEdit: Bookmark?
     @Published var isEditing: Bool = false
+    @Published var currentSelectedBookMark: Bookmark? = nil
     
     private let bookmarkRepository: BookmarkRepositoryProtocol
     private var cancellables = Set<AnyCancellable>()

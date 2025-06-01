@@ -30,13 +30,27 @@ struct BrowserView: View {
                 VStack(spacing: 0) {
                     BrowserToolbar(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel, suggestionVM: suggestionViewModel)
                     if viewModel.currentTab != nil {
-                        WebViewContainer(viewModel: viewModel)
+                        if (viewModel.currentTab?.webView != nil){
+                            WebViewContainer(viewModel: viewModel)
+                        }else{
+                            Text("no WebView")
+                        }
                     } else {
                         StartPageView(viewModel: viewModel)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity) // Fill available space
-                .toolbar(removing: .sidebarToggle)
+              
+                
+//                .toolbar(content: {
+//                    ToolbarItem(placement: .principal) {
+//                        if let currentTab = viewModel.currentTab{
+//                            if currentTab.isLoading {
+//                                VelaProgressIndicator(progress: viewModel.estimatedProgress)
+//                            }
+//                        }
+//                    }
+//                })
                 .overlay(alignment: .top) {
                     if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty {
                         SuggestionsListView(
@@ -57,6 +71,7 @@ struct BrowserView: View {
                 }
             }
         }
+       
         .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
         .browserKeyboardShortcuts(viewModel: viewModel)
         .focusable()

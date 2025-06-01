@@ -19,9 +19,7 @@ struct SidebarHeader: View {
         VStack(spacing: 0) {
             // Main header content
             VStack(spacing: 12) {
-                // Top row - Search
-                SearchBarView()
-                
+         
                 // Bottom row - Action buttons
                 ActionButtonsRow(
                     viewModel: viewModel,
@@ -39,47 +37,6 @@ struct SidebarHeader: View {
     }
 }
 
-// MARK: - Search Bar Sub-View
-struct SearchBarView: View {
-    @State private var searchHovered = false
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Button(action: {
-                // Handle search action
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
-                    
-                    Text("Search tabs, history...")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(NSColor.tertiarySystemFill))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    KeyboardShortcutHint(shortcut: "⌘K")
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(searchHovered ? Color.black.opacity(0.03) : Color(NSColor.controlBackgroundColor))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.black.opacity(0.08), lineWidth: 0.5)
-                        )
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    searchHovered = hovering
-                }
-            }
-        }
-    }
-}
 
 // MARK: - Keyboard Shortcut Hint Sub-View
 struct KeyboardShortcutHint: View {

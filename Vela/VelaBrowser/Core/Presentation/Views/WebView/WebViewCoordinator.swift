@@ -221,16 +221,14 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
     
     // MARK: - FIXED Download Policy Decision
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        print("🔍 Navigation response for: \(navigationResponse.response.url?.absoluteString ?? "unknown")")
-        print("🔍 MIME type: \(navigationResponse.response.mimeType ?? "unknown")")
+        
         
         let mimeType = navigationResponse.response.mimeType ?? ""
         let isDownload = shouldDownloadFile(mimeType: mimeType, response: navigationResponse.response)
         
-        print("🔍 Should download: \(isDownload)")
         
         if isDownload {
-            print("📥 Triggering download for: \(navigationResponse.response.url?.absoluteString ?? "unknown")")
+           
             decisionHandler(.download)
         } else {
             decisionHandler(.allow)
@@ -361,7 +359,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         let normalizedMimeType = mimeType.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let shouldDownload = downloadMimeTypes.contains(normalizedMimeType)
         
-        print("🔍 MIME type '\(normalizedMimeType)': \(shouldDownload ? "DOWNLOAD" : "DISPLAY")")
+      
         
         return shouldDownload
     }
@@ -414,12 +412,43 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
 
     // MARK: - WKUIDelegate - New Tab Support
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        
+        // Check if this is a custom contextual menu action
+        if let customWebView = webView as? CustomWKWebView,
+           let customAction = customWebView.contextualMenuAction {
+            
+            guard let url = navigationAction.request.url else { return nil }
+            
+            DispatchQueue.main.async { [weak self] in
+                switch customAction {
+                case .openInNewTab:
+                    // Open in new tab (background by default, foreground if user wants)
+                    self?.browserViewModel?.createNewTab(with: url, inBackground: false, focusAddressBar: false)
+                case .openInNewWindow:
+                    // Create new window with the URL
+                    self?.browserViewModel?.createNewWindow(with: url)
+                }
+            }
+            
+            return nil // Don't create a new web view
+        }
+        
+        // Handle regular new window requests (like target="_blank" links)
         guard let url = navigationAction.request.url,
               let browserViewModel = self.browserViewModel else { return nil }
         
+        // Check if this should open in a new window based on window features
+        let shouldOpenInNewWindow = windowFeatures.width != nil ||
+                                   windowFeatures.height != nil ||
+                                   navigationAction.modifierFlags.contains([.command, .option])
+        
         DispatchQueue.main.async {
-            let inBackground = navigationAction.modifierFlags.contains(.command)
-            browserViewModel.createNewTab(with: url, inBackground: inBackground)
+            if shouldOpenInNewWindow {
+                browserViewModel.createNewWindow(with: url)
+            } else {
+                let inBackground = navigationAction.modifierFlags.contains(.command)
+                browserViewModel.createNewTab(with: url, inBackground: inBackground, focusAddressBar: false)
+            }
         }
         
         return nil
@@ -433,7 +462,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                let browserViewModel = self.browserViewModel {
                 DispatchQueue.main.async {
                     let inBackground = navigationAction.modifierFlags.contains(.shift)
-                    browserViewModel.createNewTab(with: url, inBackground: inBackground)
+                    browserViewModel.createNewTab(with: url, inBackground: inBackground, focusAddressBar: false)
                 }
             }
         } else {
@@ -504,5 +533,96 @@ extension BrowserViewModel {
     
     func showDownloadInFinder(_ download: DownloadItem) {
         NSWorkspace.shared.selectFile(download.url.path, inFileViewerRootedAtPath: "")
+    }
+}
+
+
+
+extension WebViewRepresentable {
+    
+    // Helper method to create the custom web view
+    static func createCustomWebView(configuration: WKWebViewConfiguration, browserViewModel: BrowserViewModel?) -> CustomWKWebView {
+        let webView = CustomWKWebView(frame: .zero, configuration: configuration)
+        webView.browserViewModel = browserViewModel
+        
+        // Configure other webview properties as needed
+        webView.allowsBackForwardNavigationGestures = true
+        webView.allowsMagnification = true
+        
+        return webView
+    }
+}
+
+
+
+extension BrowserViewModel {
+    
+    /// Creates a new browser window with the specified URL
+    func createNewWindow(with url: URL? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Create configuration for the new web view
+            let configuration = WKWebViewConfiguration()
+            configuration.allowsAirPlayForMediaPlayback = true
+            configuration.mediaTypesRequiringUserActionForPlayback = []
+            
+            // Create a new AudioObservingWebView for the new window
+            let webView = AudioObservingWebView(frame: .zero, configuration: configuration)
+            webView.allowsBackForwardNavigationGestures = true
+            webView.allowsMagnification = true
+            webView.startObservingAudio()
+            
+            // Create a new NSWindow
+            let window = NSWindow(
+                contentRect: NSRect(x: 100, y: 100, width: 1200, height: 800),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            
+            // Configure window properties
+            window.title = url?.host ?? "New Browser Window"
+            window.center()
+            window.setFrameAutosaveName("BrowserWindow")
+            
+            // Set up the web view as the window's content view
+            window.contentView = webView
+            
+            // Create a new tab for this window's web view
+            let newTab = Tab(url: url ?? URL(string: "about:blank")!)
+            
+            // Create coordinator for the web view
+            let coordinator = WebViewCoordinator(
+                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self),
+                tab: newTab
+            )
+            coordinator.browserViewModel = self
+            
+            // Set up web view delegates
+            webView.navigationDelegate = coordinator
+            webView.uiDelegate = coordinator
+            
+            // Add observers
+            coordinator.addObservers(to: webView)
+            
+            // Make the window visible
+            window.makeKeyAndOrderFront(nil)
+            
+            // Load the URL if provided
+            if let url = url {
+                coordinator.loadURL(url, in: webView)
+                print("🪟 Created new window for URL: \(url.absoluteString)")
+            } else {
+                // Load a default page or about:blank
+                if let defaultURL = URL(string: "about:blank") {
+                    coordinator.loadURL(defaultURL, in: webView)
+                }
+                print("🪟 Created new blank window")
+            }
+            
+            // Track the window (optional, for management)
+            WindowManager.shared.addWindow(window, with: coordinator)
+        }
     }
 }

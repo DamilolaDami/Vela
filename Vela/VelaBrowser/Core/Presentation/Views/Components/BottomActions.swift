@@ -18,10 +18,7 @@ struct BottomActions: View {
                 .opacity(0.5)
 
             HStack(spacing: 16) {
-                ActionButton(icon: "gear", tooltip: "Settings", action: {
-                    // Settings action
-                })
-
+              
                 ActionButton(icon: "plus", tooltip: "New Tab or Space",  action: {
                     showNewMenu = true
                 })

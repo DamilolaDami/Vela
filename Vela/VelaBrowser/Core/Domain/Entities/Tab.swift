@@ -155,7 +155,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
         // Start JavaScript-based audio checking
         startAudioCheckTimer()
         
-        print("🔧 WebView setup complete for: \(title)")
+       
     }
     
     // MARK: - Native Media Observers
@@ -244,7 +244,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
      func installEnhancedAudioDetection() {
         guard let webView = webView else { return }
         
-        print("🔧 Installing enhanced audio detection for: \(title)")
+       
         
         let enhancedAudioJS = """
         (function() {
@@ -488,7 +488,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
                 if let error = error {
                     print("❌ Enhanced audio detection installation failed: \(error.localizedDescription)")
                 } else {
-                    print("✅ Enhanced audio detection installed for \(self?.title ?? "unknown")")
+                   
                 }
             }
         }
@@ -500,13 +500,13 @@ class Tab: Identifiable, Equatable, ObservableObject {
         audioCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.checkMediaActivity()
         }
-        print("⏰ Audio check timer started for: \(title)")
+        
     }
     
     private func stopAudioCheckTimer() {
         audioCheckTimer?.invalidate()
         audioCheckTimer = nil
-        print("⏰ Audio check timer stopped for: \(title)")
+      
     }
     
     // MARK: - WebView Observers
@@ -527,8 +527,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
                         self.url = newURL
                         self.lastKnownURL = newURL
                         self.isPlayingAudio = false
-                        
-                        print("🔄 URL changed to: \(newURL?.absoluteString ?? "nil")")
+                       
                         
                         // Install enhanced detection after page loads
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
@@ -694,4 +693,6 @@ class TabNavigationDelegate: NSObject, WKNavigationDelegate {
             self.tab?.isPlayingAudio = false
         }
     }
+    
+    
 }

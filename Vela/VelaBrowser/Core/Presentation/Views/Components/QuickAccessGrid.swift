@@ -10,13 +10,13 @@ import Kingfisher
 struct QuickAccessGrid: View {
     @ObservedObject var viewModel: BrowserViewModel
     
-    let quickAccessItems = [
-        QuickAccessItem(title: "YouTube", iconURL: "https://www.google.com/s2/favicons?domain=youtube.com&sz=64", color: .red, url: "https://youtube.com"),
-        
-        QuickAccessItem(title: "Figma", iconURL: "https://www.google.com/s2/favicons?domain=figma.com&sz=64", color: .orange, url: "https://figma.com"),
-        QuickAccessItem(title: "Spotify", iconURL: "https://www.google.com/s2/favicons?domain=open.spotify.com&sz=64", color: .green, url: "https://spotify.com"),
-        QuickAccessItem(title: "Notion", iconURL: "https://www.google.com/s2/favicons?domain=notion.so&sz=64", color: Color(NSColor.labelColor), url: "https://notion.so"),
-        QuickAccessItem(title: "Twitter", iconURL: "https://www.google.com/s2/favicons?domain=twitter.com&sz=64", color: .blue, url: "https://twitter.com")
+    // Make this static to prevent recreation on every view update
+    static let quickAccessItems = [
+        QuickAccessItem(id: "youtube", title: "YouTube", iconURL: "https://www.google.com/s2/favicons?domain=youtube.com&sz=64", color: Color(NSColor.labelColor), url: "https://youtube.com"),
+        QuickAccessItem(id: "figma", title: "Figma", iconURL: "https://www.google.com/s2/favicons?domain=figma.com&sz=64", color: Color(NSColor.labelColor), url: "https://figma.com"),
+        QuickAccessItem(id: "spotify", title: "Spotify", iconURL: "https://www.google.com/s2/favicons?domain=open.spotify.com&sz=64", color: Color(NSColor.labelColor), url: "https://spotify.com"),
+        QuickAccessItem(id: "notion", title: "Notion", iconURL: "https://www.google.com/s2/favicons?domain=notion.so&sz=64", color: Color(NSColor.labelColor), url: "https://notion.so"),
+        QuickAccessItem(id: "twitter", title: "Twitter", iconURL: "https://www.google.com/s2/favicons?domain=twitter.com&sz=64", color: Color(NSColor.labelColor), url: "https://twitter.com")
     ]
     
     var body: some View {
@@ -30,26 +30,28 @@ struct QuickAccessGrid: View {
             }
             
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 12) {
-                ForEach(quickAccessItems) { item in
+                ForEach(Self.quickAccessItems, id: \.id) { item in
                     QuickAccessButton(item: item) {
                         viewModel.openURL(item.url)
                     }
                 }
             }
         }
+       
     }
 }
 
 struct QuickAccessItem: Identifiable {
-    let id = UUID()
+    let id: String // Use String instead of UUID() for stable identity
     let title: String
     let iconURL: String?
     let systemIcon: String?
     let color: Color
     let url: String
     
-    // Convenience initializers
-    init(title: String, iconURL: String, color: Color, url: String) {
+    // Convenience initializers with stable ID
+    init(id: String, title: String, iconURL: String, color: Color, url: String) {
+        self.id = id
         self.title = title
         self.iconURL = iconURL
         self.systemIcon = nil
@@ -57,7 +59,8 @@ struct QuickAccessItem: Identifiable {
         self.url = url
     }
     
-    init(title: String, systemIcon: String, color: Color, url: String) {
+    init(id: String, title: String, systemIcon: String, color: Color, url: String) {
+        self.id = id
         self.title = title
         self.iconURL = nil
         self.systemIcon = systemIcon
@@ -70,6 +73,7 @@ struct QuickAccessButton: View {
     let item: QuickAccessItem
     let action: () -> Void
     @State private var isHovered = false
+    @State private var imageLoaded = false
     
     var body: some View {
         Button(action: action) {
@@ -92,41 +96,8 @@ struct QuickAccessButton: View {
                                 )
                         )
                     
-                    Group {
-                        if let iconURL = item.iconURL {
-                            KFImage(URL(string: iconURL))
-                                .cacheMemoryOnly()
-                                .fade(duration: 0.25)
-                                .onProgress { receivedSize, totalSize in
-                                    // Optional: handle progress if needed
-                                }
-                                .onSuccess { result in
-                                    // Optional: handle success if needed
-                                }
-                                .onFailure { error in
-                                    // Optional: handle failure if needed
-                                    print("Failed to load favicon: \(error)")
-                                }
-                                .placeholder {
-                                    // Fallback to system icon or loading indicator
-                                    if let systemIcon = item.systemIcon {
-                                        Image(systemName: systemIcon)
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(item.color)
-                                    } else {
-                                        ProgressView()
-                                            .scaleEffect(0.5)
-                                    }
-                                }
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 20, height: 20)
-                        } else if let systemIcon = item.systemIcon {
-                            Image(systemName: systemIcon)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(item.color)
-                        }
-                    }
+                    // Image view with stable identity
+                    imageView
                 }
                 .scaleEffect(isHovered ? 1.05 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
@@ -140,6 +111,50 @@ struct QuickAccessButton: View {
         .buttonStyle(PlainButtonStyle())
         .onHover { hovering in
             isHovered = hovering
+        }
+
+        .id(item.id)
+    }
+    
+    private var imageView: some View {
+        Group {
+            if let iconURL = item.iconURL {
+                KFImage(URL(string: iconURL))
+                    .loadDiskFileSynchronously() // Load from disk cache synchronously
+                    .cacheMemoryOnly(false) // Enable disk caching
+                    .fade(duration: 0.1) // Reduce fade duration
+                    .onSuccess { _ in
+                        imageLoaded = true
+                        
+                    }
+                    .onFailure { error in
+                        imageLoaded = false
+                      
+                    }
+                    .placeholder {
+                        // Use a consistent placeholder that matches the final image size
+                        Rectangle()
+                            .fill(item.color.opacity(0.3))
+                            .frame(width: 20, height: 20)
+                            .cornerRadius(4)
+                            .overlay(
+                                Image(systemName: "globe")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(item.color)
+                            )
+                    }
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 20, height: 20)
+                    .id("\(item.id)-image") // Stable image identity
+            } else if let systemIcon = item.systemIcon {
+                Image(systemName: systemIcon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(item.color)
+                    .onAppear {
+                        imageLoaded = true
+                    }
+            }
         }
     }
 }

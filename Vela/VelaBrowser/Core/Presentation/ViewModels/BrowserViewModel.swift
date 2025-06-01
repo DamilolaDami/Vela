@@ -25,6 +25,11 @@ class BrowserViewModel: ObservableObject {
     @Published var isJavaScriptEnabled: Bool = true
     @Published var isPopupBlockingEnabled: Bool = true
     @Published var isIncognitoMode: Bool = false
+    private var popupWindows: [WKWebView: NSWindow] = [:]
+    
+    // Cache to track loaded tabs for each space
+    private var spaceTabsCache: [UUID: [Tab]] = [:]
+    private var spaceTabsLoaded: Set<UUID> = []
     
     var adBlockRuleList: WKContentRuleList?
     
@@ -75,7 +80,7 @@ class BrowserViewModel: ObservableObject {
                         self.currentSpace = self.spaces.first
                     }
                     
-                    self.loadTabs()
+                    self.loadTabsForCurrentSpace()
                 }
             )
             .store(in: &cancellables)
@@ -100,7 +105,7 @@ class BrowserViewModel: ObservableObject {
                 } else {
                     UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.lastSelectedSpaceId)
                 }
-                self.loadTabs()
+                self.loadTabsForCurrentSpace()
             }
             .store(in: &cancellables)
     }
@@ -143,6 +148,10 @@ class BrowserViewModel: ObservableObject {
     }
     
     func deleteSpace(_ space: Space) {
+        // Clean up cache for deleted space
+        spaceTabsCache.removeValue(forKey: space.id)
+        spaceTabsLoaded.remove(space.id)
+        
         spaceRepository.deleteSpace(space)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -162,8 +171,14 @@ class BrowserViewModel: ObservableObject {
     }
     
     func selectSpace(_ space: Space) {
+        // Store current space's tabs in cache before switching
+        if let currentSpaceId = currentSpace?.id {
+            spaceTabsCache[currentSpaceId] = tabs
+            spaceTabsLoaded.insert(currentSpaceId)
+        }
+        
         currentSpace = space
-        loadTabs()
+        loadTabsForCurrentSpace()
     }
     
     private func loadSpaces() {
@@ -186,8 +201,7 @@ class BrowserViewModel: ObservableObject {
     }
     
     // MARK: - Tab Management
-    
-    func createNewTab(with url: URL? = nil, inBackground: Bool = false, shouldReloadTabs: Bool = false) {
+    func createNewTab(with url: URL? = nil, inBackground: Bool = false, shouldReloadTabs: Bool = false, focusAddressBar: Bool = true) {
         let previousTab = currentTab
         
         if !inBackground {
@@ -205,8 +219,20 @@ class BrowserViewModel: ObservableObject {
                 receiveValue: { [weak self] tab in
                     guard let self = self else { return }
                     self.configureNewTab(tab, inBackground: inBackground, previousTab: previousTab)
+                    
+                    // Update cache for current space
+                    if let spaceId = self.currentSpace?.id {
+                        self.spaceTabsCache[spaceId] = self.tabs
+                        self.spaceTabsLoaded.insert(spaceId)
+                    }
+                    
                     if shouldReloadTabs {
-                        self.loadTabs()
+                        self.loadTabsForCurrentSpace(forceReload: true)
+                    }
+                    // Auto-focus address bar only if explicitly requested and not in background
+                    if !inBackground && focusAddressBar {
+                        self.addressText = ""
+                        self.isEditing = true
                     }
                 }
             )
@@ -231,12 +257,17 @@ class BrowserViewModel: ObservableObject {
             tab.webView?.load(URLRequest(url: url))
         }
         
-        tabs.append(tab)
+        // Insert new tab at the beginning of the tabs array if not in background
+        if inBackground {
+            tabs.append(tab)
+        } else {
+            tabs.insert(tab, at: 0)
+        }
         
         // Update currentSpace.tabs
         if let space = currentSpace {
             let updatedSpace = space
-            updatedSpace.tabs.append(tab)
+            updatedSpace.tabs = tabs
             updateSpace(updatedSpace)
         }
         
@@ -247,22 +278,32 @@ class BrowserViewModel: ObservableObject {
         } else {
             currentTab = tab
         }
-        
-        print("Created tab with URL: \(tab.url?.absoluteString ?? "nil"), background: \(inBackground)")
     }
     
     func duplicateCurrentTab(inBackground: Bool = false) {
         guard let current = currentTab,
               let url = current.url else { return }
         
-        createNewTab(with: url, inBackground: inBackground)
+        createNewTab(with: url, inBackground: inBackground, focusAddressBar: false)
     }
     
     func selectTab(_ tab: Tab) {
         currentTab?.isLoading = false
+        if tab.webView == nil {
+            let configuration = WKWebViewConfiguration()
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+            configuration.preferences.isFraudulentWebsiteWarningEnabled = false
+            configuration.applicationNameForUserAgent = "Safari/605.1.15"
+            tab.webView = WKWebView(frame: .zero, configuration: configuration)
+            tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            if let url = tab.url {
+                tab.webView?.load(URLRequest(url: url))
+            }
+        }
         print("Selecting tab: \(tab.url?.absoluteString ?? "nil")")
         currentTab = tab
-        addressText = currentTab?.url?.absoluteString ?? ""
+        addressText = tab.url?.absoluteString ?? ""
     }
     
     func selectTabAtIndex(_ index: Int) {
@@ -307,6 +348,11 @@ class BrowserViewModel: ObservableObject {
                     if self.currentTab?.id == updatedTab.id {
                         self.currentTab = updatedTab
                     }
+                    
+                    // Update cache
+                    if let spaceId = self.currentSpace?.id {
+                        self.spaceTabsCache[spaceId] = self.tabs
+                    }
                 }
             )
             .store(in: &cancellables)
@@ -314,17 +360,7 @@ class BrowserViewModel: ObservableObject {
     
     func closeTab(_ tab: Tab) {
         guard let tabIndex = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        
-        tabs.remove(at: tabIndex)
-        
-        if currentTab?.id == tab.id {
-            if tabs.isEmpty {
-                createNewTab()
-            } else {
-                let newIndex = min(tabIndex, tabs.count - 1)
-                currentTab = tabs[newIndex]
-            }
-        }
+        closeAndDeleteTab(tab)
     }
     
     func closeAndDeleteTab(_ tab: Tab) {
@@ -334,6 +370,11 @@ class BrowserViewModel: ObservableObject {
         }
         
         tabs.remove(at: tabIndex)
+        
+        // Update cache immediately
+        if let spaceId = currentSpace?.id {
+            spaceTabsCache[spaceId] = tabs
+        }
         
         tabRepository.delete(tabId: tab.id)
             .receive(on: DispatchQueue.main)
@@ -346,6 +387,13 @@ class BrowserViewModel: ObservableObject {
                 receiveValue: { [weak self] in
                     guard let self = self else { return }
                     
+                    // Update the currentSpace's tabs and persist it
+                    if let space = self.currentSpace {
+                        let updatedSpace = space
+                        updatedSpace.tabs = self.tabs
+                        self.updateSpace(updatedSpace)
+                    }
+                    
                     if self.currentTab?.id == tab.id {
                         if self.tabs.isEmpty {
                             self.createNewTab()
@@ -353,12 +401,6 @@ class BrowserViewModel: ObservableObject {
                             let newIndex = min(tabIndex, self.tabs.count - 1)
                             self.currentTab = self.tabs[newIndex]
                         }
-                    }
-                    
-                    if let space = self.currentSpace {
-                        let updatedSpace = space
-                        updatedSpace.tabs.removeAll { $0.id == tab.id }
-                        self.updateSpace(updatedSpace)
                     }
                     
                     print("Closed and deleted tab \(tab.id): \(tab.title ?? "Untitled"), \(tab.url?.absoluteString ?? "no URL")")
@@ -372,23 +414,78 @@ class BrowserViewModel: ObservableObject {
         closeTab(current)
     }
     
-    func closeOtherTabs(except keepTab: Tab? = nil) {
-        let tabToKeep = keepTab ?? currentTab
-        guard let keep = tabToKeep else { return }
-        
-        tabs = [keep]
-        currentTab = keep
-    }
-    
     func closeTabsToRight(of tab: Tab) {
         guard let tabIndex = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         
         let tabsToRemove = Array(tabs[(tabIndex + 1)...])
         tabs = Array(tabs[0...tabIndex])
         
+        // Update cache immediately
+        if let spaceId = currentSpace?.id {
+            spaceTabsCache[spaceId] = tabs
+        }
+        
+        // Delete removed tabs from repository
+        for tabToRemove in tabsToRemove {
+            tabRepository.delete(tabId: tabToRemove.id)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to delete tab \(tabToRemove.id): \(error)")
+                        }
+                    },
+                    receiveValue: { }
+                )
+                .store(in: &cancellables)
+        }
+        
+        // Update currentSpace's tabs
+        if let space = currentSpace {
+            let updatedSpace = space
+            updatedSpace.tabs = tabs
+            updateSpace(updatedSpace)
+        }
+        
         if let current = currentTab,
            tabsToRemove.contains(where: { $0.id == current.id }) {
             currentTab = tab
+        }
+    }
+    
+    func closeOtherTabs(except keepTab: Tab? = nil) {
+        let tabToKeep = keepTab ?? currentTab
+        guard let keep = tabToKeep else { return }
+        
+        let tabsToRemove = tabs.filter { $0.id != keep.id }
+        tabs = [keep]
+        currentTab = keep
+        
+        // Update cache immediately
+        if let spaceId = currentSpace?.id {
+            spaceTabsCache[spaceId] = tabs
+        }
+        
+        // Delete removed tabs from repository
+        for tabToRemove in tabsToRemove {
+            tabRepository.delete(tabId: tabToRemove.id)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to delete tab \(tabToRemove.id): \(error)")
+                        }
+                    },
+                    receiveValue: { }
+                )
+                .store(in: &cancellables)
+        }
+        
+        // Update currentSpace's tabs
+        if let space = currentSpace {
+            let updatedSpace = space
+            updatedSpace.tabs = tabs
+            updateSpace(updatedSpace)
         }
     }
     
@@ -420,6 +517,24 @@ class BrowserViewModel: ObservableObject {
     
     func focusAddressBar() {
         isEditing = true
+    }
+    
+    func openBookmarkForSelected(bookmarkViewModel: BookmarkViewModel, inBackground: Bool = false) {
+        guard let selectedBookmarkURL = bookmarkViewModel.currentSelectedBookMark?.url else { return }
+        
+        createNewTab(with: selectedBookmarkURL, inBackground: inBackground)
+    }
+    
+    func openURL(_ urlString: String) {
+        // Implementation to open URL in current or new tab
+        guard let url = URL(string: urlString) else { return }
+        
+        if let currentTab = currentTab {
+            currentTab.url = url
+        } else {
+            createNewTab()
+            currentTab?.url = url
+        }
     }
     
     // MARK: - Keyboard Shortcut Handlers
@@ -510,18 +625,32 @@ class BrowserViewModel: ObservableObject {
         isLoading = false
     }
     
-    private func loadTabs() {
+    // MARK: - Smart Tab Loading with Caching
+    
+    private func loadTabsForCurrentSpace(forceReload: Bool = false) {
         guard let spaceId = currentSpace?.id else {
             tabs = []
             currentTab = nil
             return
         }
         
-        // Skip if tabs are already loaded for the current space
-        if !tabs.isEmpty && tabs.first?.spaceId == spaceId {
+        // Check if tabs are already loaded for this space and we're not forcing a reload
+        if !forceReload && spaceTabsLoaded.contains(spaceId), let cachedTabs = spaceTabsCache[spaceId] {
+            print("Loading cached tabs for space \(spaceId): \(cachedTabs.count) tabs")
+            tabs = cachedTabs
+            currentTab = tabs.first
+            
+            // Ensure WebViews are still properly configured
+            tabs.forEach { tab in
+                if tab.webView == nil {
+                    configureWebViewForTab(tab)
+                }
+            }
             return
         }
         
+        // Load tabs from repository
+        print("Loading tabs from repository for space \(spaceId)")
         tabRepository.getBySpace(spaceId: spaceId)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -538,25 +667,52 @@ class BrowserViewModel: ObservableObject {
                     self.tabs = tabs
                     self.currentTab = tabs.first
                     
-                    // Configure web views only for new tabs
+                    // Cache the loaded tabs
+                    self.spaceTabsCache[spaceId] = tabs
+                    self.spaceTabsLoaded.insert(spaceId)
+                    
+                    // Configure web views for all tabs
                     tabs.forEach { tab in
                         if tab.webView == nil {
-                            let configuration = WKWebViewConfiguration()
-                            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-                            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-                            configuration.preferences.isFraudulentWebsiteWarningEnabled = false
-                            configuration.applicationNameForUserAgent = "Safari/605.1.15"
-                            tab.webView = WKWebView(frame: .zero, configuration: configuration)
-                            tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-                            if let url = tab.url {
-                                tab.webView?.load(URLRequest(url: url))
-                            }
+                            self.configureWebViewForTab(tab)
                         }
                     }
                 }
             )
             .store(in: &cancellables)
     }
+    
+    private func configureWebViewForTab(_ tab: Tab) {
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.preferences.isFraudulentWebsiteWarningEnabled = false
+        configuration.applicationNameForUserAgent = "Safari/605.1.15"
+        
+        tab.webView = WKWebView(frame: .zero, configuration: configuration)
+        tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        
+        if let url = tab.url {
+            tab.webView?.load(URLRequest(url: url))
+        }
+    }
+    
+    // Method to force refresh tabs for current space (useful for debugging or manual refresh)
+    func forceRefreshCurrentSpaceTabs() {
+        if let spaceId = currentSpace?.id {
+            spaceTabsLoaded.remove(spaceId)
+            spaceTabsCache.removeValue(forKey: spaceId)
+        }
+        loadTabsForCurrentSpace(forceReload: true)
+    }
+    
+    // Method to clear all cache (useful for memory management)
+    func clearTabsCache() {
+        spaceTabsCache.removeAll()
+        spaceTabsLoaded.removeAll()
+        print("Cleared all tabs cache")
+    }
+    
     // Legacy methods
     func reloadTab(_ tab: Tab) {
         tab.webView?.reload()
@@ -564,7 +720,7 @@ class BrowserViewModel: ObservableObject {
     
     func duplicateTab(_ tab: Tab) {
         guard let url = tab.url else { return }
-        createNewTab(with: url)
+        createNewTab(with: url, focusAddressBar: false)
     }
     
     func pinTab(_ tab: Tab) {
@@ -574,10 +730,12 @@ class BrowserViewModel: ObservableObject {
     func muteTab(_ tab: Tab) {
         // tab.isMuted = true
     }
+    
     func toggleFullScreen(_ isFullScreen: Bool) {
-            self.isFullScreen = isFullScreen
-            objectWillChange.send() // Trigger UI update
-        }
+        self.isFullScreen = isFullScreen
+        objectWillChange.send() // Trigger UI update
+    }
+    
     func setupAdBlocking() {
         let adBlockRules = """
         [
@@ -634,7 +792,7 @@ class BrowserViewModel: ObservableObject {
     }
     
     private func applyAdBlocking() {
-         let tabs = tabs
+        let tabs = tabs
         for tab in tabs {
             guard let webView = tab.webView else { continue }
             webView.configuration.userContentController.removeAllContentRuleLists()
@@ -678,6 +836,29 @@ class BrowserViewModel: ObservableObject {
             webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = !enabled
         }
     }
+    
+    func addPopupWindow(_ window: NSWindow, for webView: WKWebView) {
+            popupWindows[webView] = window
+            // Observe window closing to clean up
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                self?.popupWindows.removeValue(forKey: webView)
+                print("🪟 Popup window closed for web view: \(webView)")
+            }
+        }
+        
+        // Optional: Method to close all popup windows
+        func closeAllPopupWindows() {
+            for (webView, window) in popupWindows {
+                webView.stopLoading()
+                window.close()
+            }
+            popupWindows.removeAll()
+            print("🪟 All popup windows closed")
+        }
 }
 
 

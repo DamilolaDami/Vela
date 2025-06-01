@@ -14,23 +14,25 @@ struct VelaApp: App {
     @NSApplicationDelegateAdaptor(VelaAppDelegate.self) var appDelegate
     
     var body: some Scene {
+        let bookMarkVM = container.makeBookMarkViewModel()
+        let viewModel = container.makeBrowserViewModel()
+        let suggestionVM = container.makeSuggestionViewModel()
         WindowGroup {
-            let viewModel = container.makeBrowserViewModel()
-            let bookMarkVM = container.makeBookMarkViewModel()
-            let suggestionVM = container.makeSuggestionViewModel()
+            
             BrowserView(viewModel: viewModel, bookMarkViewModel: bookMarkVM, suggestionViewModel: suggestionVM)
                 .withNotificationBanners()
                 .frame(minWidth: 1200, minHeight: 700)
                 .onAppear {
-                    // Inject the view model into the app delegate
+                   
                     appDelegate.browserViewModel = viewModel
+                    appDelegate.bookmarkViewModel = bookMarkVM
                 }
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
         .modelContainer(PersistenceController.shared.container)
         .commands {
-            VelaCommands(appDelegate: appDelegate)
+            VelaCommands(appDelegate: appDelegate, bookMarkViewModel: bookMarkVM, browserViewModel: viewModel)
         }
     }
 }

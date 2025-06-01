@@ -15,18 +15,20 @@ struct WebViewContainer: View {
                     browserViewModel: viewModel
                 )
                 .id(currentTab.id)
+                
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+           
             if !hasInitialLoad {
                 loadInitialURL()
                 hasInitialLoad = true
             }
         }
-        .onChange(of: viewModel.currentTab?.id) { _, _ in
+        .onChange(of: viewModel.currentTab?.id) { oldId, newId in
+          
             hasInitialLoad = false
-            
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 loadInitialURL()
                 hasInitialLoad = true
@@ -37,8 +39,10 @@ struct WebViewContainer: View {
     private func loadInitialURL() {
         guard let currentTab = viewModel.currentTab,
               let webView = currentTab.webView,
-              let url = currentTab.url else { return }
-
+              let url = currentTab.url else {
+            print("🚫 loadInitialURL failed: tab=\(String(describing: viewModel.currentTab)), webView=\(String(describing: viewModel.currentTab?.webView)), url=\(String(describing: viewModel.currentTab?.url))")
+            return
+        }
         if webView.url != url {
             DispatchQueue.main.async {
                 let request = URLRequest(url: url)
@@ -60,7 +64,7 @@ class AudioObservingWebView: WKWebView {
         if key == "_isPlayingAudio" {
             if let value = try? self.value(forKey: "_isPlayingAudio") as? Bool {
                 isPlayingAudioPrivate = value
-                print("🎵 [_isPlayingAudio] state changed: \(value)")
+            
             }
         }
     }
@@ -73,7 +77,7 @@ class AudioObservingWebView: WKWebView {
         if keyPath == "_isPlayingAudio" {
             if let value = (change?[.newKey] as? NSNumber)?.boolValue {
                 isPlayingAudioPrivate = value
-                print("🎧 [_isPlayingAudio] changed via KVO: \(value)")
+              
             }
         } else {
             // Always call super for unhandled keys
