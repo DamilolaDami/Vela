@@ -2,6 +2,7 @@
 import WebKit
 import AppKit
 import Foundation
+import Combine
 
 class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     var parent: WebViewRepresentable?
@@ -11,6 +12,8 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
     private var isObserving = false
     private var lastRequestedURL: URL?
     private var pendingNavigation: WKNavigation?
+    private var zoomCancellable: AnyCancellable?
+    private var lastMagnification: CGFloat = 1.0
     
     // Download tracking
     private var downloadAssociations: [WKDownload: DownloadItem] = [:]
@@ -19,6 +22,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         self.parent = parent
         self.tabId = tab.id
         super.init()
+        setupZoomObserver(tab: tab)
     }
     
     // MARK: - Observer Management (unchanged)
@@ -30,27 +34,43 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         }
         
         self.webView = webView
-        
+        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.magnification), options: [.new], context: nil)
         webView.addObserver(self, forKeyPath: #keyPath(WKWebView.isLoading), options: [.new, .initial], context: nil)
         webView.addObserver(self, forKeyPath: #keyPath(WKWebView.estimatedProgress), options: [.new, .initial], context: nil)
         webView.addObserver(self, forKeyPath: #keyPath(WKWebView.title), options: [.new, .initial], context: nil)
         webView.addObserver(self, forKeyPath: #keyPath(WKWebView.url), options: [.new, .initial], context: nil)
+        
+        // Apply initial zoom level
+        DispatchQueue.main.async {
+            webView.setMagnification(self.parent?.tab.zoomLevel ?? 1.0, centeredAt: .zero)
+        }
         
         isObserving = true
     }
     
     func removeObservers(from webView: WKWebView) {
         guard isObserving, self.webView == webView else { return }
-        
+        zoomCancellable?.cancel()
         webView.removeObserver(self, forKeyPath: #keyPath(WKWebView.isLoading))
         webView.removeObserver(self, forKeyPath: #keyPath(WKWebView.estimatedProgress))
         webView.removeObserver(self, forKeyPath: #keyPath(WKWebView.title))
         webView.removeObserver(self, forKeyPath: #keyPath(WKWebView.url))
-        
+        webView.removeObserver(self, forKeyPath: #keyPath(WKWebView.magnification))
         isObserving = false
         self.webView = nil
     }
-    
+    private func setupZoomObserver(tab: Tab) {
+        zoomCancellable = tab.$zoomLevel
+            .sink { [weak self] newZoomLevel in
+                guard let self = self,
+                      let webView = self.webView,
+                      tab.id == self.tabId else { return }
+                DispatchQueue.main.async {
+                    webView.setMagnification(newZoomLevel, centeredAt: .zero)
+                    tab.startZoomIndicator()
+                }
+            }
+    }
     // MARK: - URL Loading (unchanged)
     func loadURL(_ url: URL, in webView: WKWebView) {
         guard url != lastRequestedURL else { return }
@@ -99,6 +119,15 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                     tab.title = "Untitled"
                     tabUpdated = true
                 }
+            case #keyPath(WKWebView.magnification):
+                            if let newMagnification = change?[.newKey] as? CGFloat,
+                               newMagnification != self.lastMagnification {
+                                self.lastMagnification = newMagnification
+                                tab.zoomLevel = newMagnification
+                                tab.startZoomIndicator()
+                                tabUpdated = true
+                            }
+                
             case #keyPath(WKWebView.url):
                 if let newURL = webView.url, tab.url != newURL {
                     tab.url = newURL

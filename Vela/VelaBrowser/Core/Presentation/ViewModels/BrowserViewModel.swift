@@ -25,6 +25,7 @@ class BrowserViewModel: ObservableObject {
     @Published var isJavaScriptEnabled: Bool = true
     @Published var isPopupBlockingEnabled: Bool = true
     @Published var isIncognitoMode: Bool = false
+    @Published var showCommandPalette = false
     private var popupWindows: [WKWebView: NSWindow] = [:]
     
     // Cache to track loaded tabs for each space
@@ -518,6 +519,33 @@ class BrowserViewModel: ObservableObject {
     func focusAddressBar() {
         isEditing = true
     }
+    func zoomIn() {
+        currentTab?.zoomIn()
+        updateCurrentTab()
+      
+    }
+    func updateCurrentTab() {
+       guard let currentTab = currentTab else { return }
+        updateTab(currentTab)
+    }
+
+        // Zoom out on a specific tab
+    func zoomOut() {
+        currentTab?.zoomOut()
+        updateCurrentTab()
+    }
+
+        // Reset zoom for a specific tab
+    func resetZoom() {
+        currentTab?.resetZoom()
+        updateCurrentTab()
+    }
+
+        // Set specific zoom level for a tab
+    func setZoomLevel(zoomLevel: CGFloat) {
+        currentTab?.setZoomLevel(zoomLevel)
+        updateCurrentTab()
+    }
     
     func openBookmarkForSelected(bookmarkViewModel: BookmarkViewModel, inBackground: Bool = false) {
         guard let selectedBookmarkURL = bookmarkViewModel.currentSelectedBookMark?.url else { return }
@@ -577,6 +605,8 @@ class BrowserViewModel: ObservableObject {
             focusAddressBar()
         case .toggleSidebar:
             toggleSidebar()
+        case .toggleVelaPilot:
+            self.showCommandPalette.toggle()
         }
     }
     
@@ -694,6 +724,7 @@ class BrowserViewModel: ObservableObject {
         
         if let url = tab.url {
             tab.webView?.load(URLRequest(url: url))
+            tab.reloadFavicon()
         }
     }
     
@@ -882,6 +913,7 @@ enum KeyboardShortcut {
     case stop                    // Cmd+.
     case focusAddressBar         // Cmd+L
     case toggleSidebar           // Cmd+Shift+S
+    case toggleVelaPilot          // Cmd+K
 
     static func from(event: NSEvent) -> KeyboardShortcut? {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)

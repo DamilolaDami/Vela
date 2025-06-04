@@ -12,74 +12,88 @@ struct BrowserView: View {
     @StateObject private var bookMarkViewModel: BookmarkViewModel
     @StateObject private var previewManager = TabPreviewManager()
     @StateObject private var suggestionViewModel: SuggestionViewModel
-    init(viewModel: BrowserViewModel, bookMarkViewModel: BookmarkViewModel, suggestionViewModel: SuggestionViewModel) {
+    @StateObject private var velaPilotViewModel: VelaPilotViewModel
+    init(viewModel: BrowserViewModel, bookMarkViewModel: BookmarkViewModel, suggestionViewModel: SuggestionViewModel, velaPilotViewModel: VelaPilotViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
         self._bookMarkViewModel = StateObject(wrappedValue: bookMarkViewModel)
         self._suggestionViewModel = StateObject(wrappedValue: suggestionViewModel)
+        self._velaPilotViewModel = StateObject(wrappedValue: velaPilotViewModel)
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            NavigationSplitView(columnVisibility: $viewModel.columnVisibility) {
-                // Sidebar
+        ZStack{
+            VStack(spacing: 0) {
+                NavigationSplitView(columnVisibility: $viewModel.columnVisibility) {
+                    // Sidebar
                     SidebarView(viewModel: viewModel, previewManager: previewManager)
                         .frame(minWidth: 280, maxWidth: 320)
                         .navigationSplitViewColumnWidth(280)
-            } detail: {
-                // Main Content
-                VStack(spacing: 0) {
-                    BrowserToolbar(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel, suggestionVM: suggestionViewModel)
-                    if viewModel.currentTab != nil {
-                        if (viewModel.currentTab?.webView != nil){
-                            WebViewContainer(viewModel: viewModel)
-                        }else{
-                            Text("no WebView")
+                } detail: {
+                    // Main Content
+                    VStack(spacing: 0) {
+                        BrowserToolbar(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel, suggestionVM: suggestionViewModel)
+                        if viewModel.currentTab != nil {
+                            if (viewModel.currentTab?.webView != nil){
+                                WebViewContainer(viewModel: viewModel)
+                            }else{
+                                Text("no WebView")
+                            }
+                        } else {
+                            StartPageView(viewModel: viewModel)
                         }
-                    } else {
-                        StartPageView(viewModel: viewModel)
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity) // Fill available space
-              
-                
-//                .toolbar(content: {
-//                    ToolbarItem(placement: .principal) {
-//                        if let currentTab = viewModel.currentTab{
-//                            if currentTab.isLoading {
-//                                VelaProgressIndicator(progress: viewModel.estimatedProgress)
-//                            }
-//                        }
-//                    }
-//                })
-                .overlay(alignment: .top) {
-                    if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty {
-                        SuggestionsListView(
-                                 suggestionViewModel: suggestionViewModel,
-                                 onSuggestionSelected: { selectedURL in
-                                     viewModel.addressText = selectedURL
-                                     viewModel.navigateToURL()
-                                 },
-                                 onEditingChanged: { isEditing in
-                                     viewModel.isEditing = isEditing
-                                 }
-                             )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // Fill available space
+                    
+                    
+                                    .toolbar(content: {
+                                        ToolbarItem(placement: .principal) {
+                                            if let currentTab = viewModel.currentTab{
+                                                if currentTab.isLoading {
+                                                    VelaProgressIndicator(progress: viewModel.estimatedProgress)
+                                                }
+                                            }
+                                        }
+                                    })
+                    .overlay(alignment: .top) {
+                        if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty {
+                            SuggestionsListView(
+                                suggestionViewModel: suggestionViewModel,
+                                onSuggestionSelected: { selectedURL in
+                                    viewModel.addressText = selectedURL
+                                    viewModel.navigateToURL()
+                                },
+                                onEditingChanged: { isEditing in
+                                    viewModel.isEditing = isEditing
+                                }
+                            )
                             .frame(maxWidth: 530)
                             .padding(.top, 4)
-                           // .transition(.opacity.combined(with: .move(edge: .top)))
+                            // .transition(.opacity.combined(with: .move(edge: .top)))
                             .offset(y: 48)
+                        }
                     }
                 }
             }
+            
+            .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
+            .browserKeyboardShortcuts(viewModel: viewModel)
+            .focusable()
+            .overlay(
+                TabPreviewOverlay(previewManager: previewManager)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            )
+            .sheet(isPresented: $viewModel.showCommandPalette) {
+                VelaPilotView(viewModel: velaPilotViewModel, browserViewModel: viewModel)
+                    .onKeyPress(.escape) {
+                        viewModel.showCommandPalette = false
+                        return .handled
+                    }
+            }
+            
+           
         }
        
-        .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
-        .browserKeyboardShortcuts(viewModel: viewModel)
-        .focusable()
-        .overlay(
-            TabPreviewOverlay(previewManager: previewManager)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        )
-       
+        
     }
    
 }

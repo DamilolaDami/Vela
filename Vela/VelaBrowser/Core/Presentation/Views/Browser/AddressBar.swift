@@ -50,6 +50,7 @@ struct AddressBar: View {
                           .onSubmit {
                               onCommit()
                               endEditing()
+                              suggestionVM.isShowingSuggestions = false
                           }
                           .onChange(of: text) { _, newValue in
                               suggestionVM.fetchSuggestions(for: newValue)

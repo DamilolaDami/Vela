@@ -18,6 +18,14 @@ struct WebViewContainer: View {
                 
             }
         }
+        .overlay(alignment: .topTrailing, content: {
+            Group {
+                if let tab = viewModel.currentTab, tab.isZooming {
+                    ZoomIndicator(zoomLevel: tab.zoomLevel, isZooming: tab.isZooming)
+                        .padding()
+                }
+            }
+        })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
            

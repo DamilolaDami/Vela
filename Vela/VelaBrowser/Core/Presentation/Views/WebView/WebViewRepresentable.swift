@@ -3,102 +3,105 @@ import WebKit
 
 // MARK: - Custom WKWebView with contextual menu support
 class CustomAudioObservingWebView: AudioObservingWebView {
-    
-    // Property to track the custom action selected from contextual menu
     var contextualMenuAction: ContextualMenuAction?
     weak var browserViewModel: BrowserViewModel?
-    
-    // Define custom actions
+
     enum ContextualMenuAction {
         case openInNewTab
         case openInNewWindow
-        // Add other actions as needed
+        case download
     }
-    
+
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
-        
+
         var items = menu.items
-        
-        // Find and modify existing menu items
+
         for idx in (0..<items.count).reversed() {
             if let id = items[idx].identifier?.rawValue {
-                // Check for link-related menu items
+                // Preserve and enhance existing menu items
                 if id == "WKMenuItemIdentifierOpenLinkInNewWindow" {
-                    // Create "Open in New Tab" menu item
                     let action = #selector(processMenuItem(_:))
                     let tabMenuItem = NSMenuItem(title: "Open Link in New Tab", action: action, keyEquivalent: "")
                     tabMenuItem.identifier = NSUserInterfaceItemIdentifier("openLinkInNewTab")
                     tabMenuItem.target = self
                     tabMenuItem.representedObject = items[idx]
-                    
-                    // Insert the new menu item right after the original
                     items.insert(tabMenuItem, at: idx + 1)
-                }
-                
-                // You can also handle images and other elements
-                else if id == "WKMenuItemIdentifierOpenImageInNewWindow" {
+                } else if id == "WKMenuItemIdentifierOpenImageInNewWindow" {
                     let action = #selector(processMenuItem(_:))
                     let tabMenuItem = NSMenuItem(title: "Open Image in New Tab", action: action, keyEquivalent: "")
                     tabMenuItem.identifier = NSUserInterfaceItemIdentifier("openImageInNewTab")
                     tabMenuItem.target = self
                     tabMenuItem.representedObject = items[idx]
                     items.insert(tabMenuItem, at: idx + 1)
-                }
-                
-                // Handle media (videos)
-                else if id == "WKMenuItemIdentifierOpenMediaInNewWindow" {
+                } else if id == "WKMenuItemIdentifierOpenMediaInNewWindow" {
                     let action = #selector(processMenuItem(_:))
                     let tabMenuItem = NSMenuItem(title: "Open Video in New Tab", action: action, keyEquivalent: "")
                     tabMenuItem.identifier = NSUserInterfaceItemIdentifier("openMediaInNewTab")
                     tabMenuItem.target = self
                     tabMenuItem.representedObject = items[idx]
                     items.insert(tabMenuItem, at: idx + 1)
+                } else if id == "WKMenuItemIdentifierDownloadLinkedFile" ||
+                          id == "WKMenuItemIdentifierDownloadImage" ||
+                          id == "WKMenuItemIdentifierDownloadMedia" {
+                    // Preserve the download option and map it to our custom action
+                    let action = #selector(processMenuItem(_:))
+                    items[idx].target = self
+                    items[idx].action = action
+                    items[idx].representedObject = items[idx] // Pass the original item for reference
+                    contextualMenuAction = .download // Set the action for download
                 }
-                
-                // Optional: Remove download options if you don't want them
-                /*
-                else if id == "WKMenuItemIdentifierDownloadLinkedFile" ||
-                        id == "WKMenuItemIdentifierDownloadImage" ||
-                        id == "WKMenuItemIdentifierDownloadMedia" {
-                    items.remove(at: idx)
-                }
-                */
             }
         }
-        
-        // Update the menu with our modifications
+
         menu.items = items
     }
-    
+
     @objc func processMenuItem(_ menuItem: NSMenuItem) {
-        // Reset the action
         self.contextualMenuAction = nil
-        
+
         guard let originalMenuItem = menuItem.representedObject as? NSMenuItem else { return }
-        
-        // Determine which custom action was selected
+
         if let identifier = menuItem.identifier?.rawValue {
+            print("originalMenuItem identifier: \(identifier)")
             switch identifier {
             case "openLinkInNewTab", "openImageInNewTab", "openMediaInNewTab":
                 self.contextualMenuAction = .openInNewTab
+            case "WKMenuItemIdentifierDownloadLinkedFile", "WKMenuItemIdentifierDownloadImage", "WKMenuItemIdentifierDownloadMedia":
+                self.contextualMenuAction = .download
             default:
                 break
             }
         }
-        
-        // Trigger the original menu item's action to get the URL
-        if let action = originalMenuItem.action {
+
+        // Trigger the original action if it's a download
+        if contextualMenuAction == .download {
+          
+            if let url = self.contextualMenuActionURL {
+                print("contextualMenuActionURL-2: \(url)")
+                browserViewModel?.initiateDownload(from: url)
+            }
+        } else if let action = originalMenuItem.action {
+            print("action-2: \(action)")
             originalMenuItem.target?.perform(action, with: originalMenuItem)
         }
     }
-    
+
+    // Property to store the URL from the contextual menu event
+    private var contextualMenuActionURL: URL? {
+        didSet {
+            if contextualMenuActionURL != nil && contextualMenuAction == .download {
+                print("contextualMenuActionURL: \(contextualMenuActionURL)")
+                browserViewModel?.initiateDownload(from: contextualMenuActionURL!)
+            }
+        }
+    }
+
     override func didCloseMenu(_ menu: NSMenu, with event: NSEvent?) {
         super.didCloseMenu(menu, with: event)
-        
-        // Clear the action after a delay to ensure the navigation delegate has time to process
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             self.contextualMenuAction = nil
+            self.contextualMenuActionURL = nil
         }
     }
 }
@@ -261,6 +264,14 @@ struct WebViewRepresentable: NSViewRepresentable {
 extension BrowserViewModel {
     
     // Method to clear all website data (for privacy/reset)
+    func initiateDownload(from url: URL) {
+        print("downloading file: \(currentTab?.webView)")
+        guard let webView = currentTab?.webView else { return }
+        
+        
+        let request = URLRequest(url: url)
+        webView.load(request) // This should trigger the download policy decision
+    }
     func clearAllWebsiteData() async {
         let dataStore = WKWebsiteDataStore.default()
         let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()

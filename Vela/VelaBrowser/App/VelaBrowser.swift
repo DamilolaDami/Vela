@@ -17,13 +17,15 @@ struct VelaApp: App {
         let bookMarkVM = container.makeBookMarkViewModel()
         let viewModel = container.makeBrowserViewModel()
         let suggestionVM = container.makeSuggestionViewModel()
+        let velaPilotViewModel = container.makeVelaPilotViewModel(with: viewModel, with: bookMarkVM)
         WindowGroup {
             
-            BrowserView(viewModel: viewModel, bookMarkViewModel: bookMarkVM, suggestionViewModel: suggestionVM)
+            BrowserView(viewModel: viewModel, bookMarkViewModel: bookMarkVM, suggestionViewModel: suggestionVM, velaPilotViewModel: velaPilotViewModel)
+//            OnboardingView()
+           
                 .withNotificationBanners()
                 .frame(minWidth: 1200, minHeight: 700)
                 .onAppear {
-                   
                     appDelegate.browserViewModel = viewModel
                     appDelegate.bookmarkViewModel = bookMarkVM
                 }

@@ -16,7 +16,16 @@ class Tab: Identifiable, Equatable, ObservableObject {
     @Published var lastAccessedAt: Date
     @Published var isPinned: Bool = false
     @Published var position: Int = 0
+
     @Published var scrollPosition: Double = 0
+    @Published var zoomLevel: CGFloat = 1.0 // Default zoom level (100%)
+    @Published var isZooming: Bool = false
+    private var zoomIndicatorTimer: Timer?
+
+    // Minimum and maximum zoom levels
+    private let minZoomLevel: CGFloat = 0.5  // 50%
+    private let maxZoomLevel: CGFloat = 2.0  // 200%
+    private let zoomStep: CGFloat = 0.1
     var webView: WKWebView?
     private var cancellables = Set<AnyCancellable>()
     private var webViewObservers: [NSKeyValueObservation] = []
@@ -75,50 +84,50 @@ class Tab: Identifiable, Equatable, ObservableObject {
     }
     
     private func loadFavicon(for url: URL) {
+        guard let webView = webView, !webView.isLoading else {
+            // Retry after a delay if the page is still loading
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.loadFavicon(for: url)
+            }
+            return
+        }
+        
         // Reset favicon
         self.favicon = nil
         
-        guard let webView = webView else { return }
-        
-        let waitForLoadJS = """
-        new Promise(resolve => {
-            if (document.readyState === 'complete') {
-                resolve();
-            } else {
-                window.addEventListener('load', resolve);
-            }
-        });
+        let faviconJS = """
+        (function() {
+            let link = document.querySelector('link[rel~="icon"]');
+            return link ? link.href : null;
+        })();
         """
         
-        webView.evaluateJavaScript(waitForLoadJS) { [weak self] (_, _) in
+        webView.evaluateJavaScript(faviconJS) { [weak self] (result, error) in
             guard let self = self else { return }
-            let faviconJS = """
-            (function() {
-                let link = document.querySelector('link[rel~="icon"]');
-                return link ? link.href : null;
-            })();
-            """
-            
-            webView.evaluateJavaScript(faviconJS) { [weak self] (result, error) in
-                guard let self = self else { return }
-                
-                if let faviconURLString = result as? String, let faviconURL = URL(string: faviconURLString) {
-                    self.fetchFavicon(from: faviconURL)
-                } else {
-                    let faviconURL = url.deletingLastPathComponent().appendingPathComponent("favicon.ico")
-                    self.fetchFavicon(from: faviconURL)
-                }
+            if let faviconURLString = result as? String, let faviconURL = URL(string: faviconURLString) {
+                self.fetchFavicon(from: faviconURL)
+            } else {
+                let faviconURL = url.deletingLastPathComponent().appendingPathComponent("favicon.ico")
+                self.fetchFavicon(from: faviconURL)
             }
         }
     }
     
     private func fetchFavicon(from url: URL) {
         URLSession.shared.dataTaskPublisher(for: url)
-            .map { Data($0.data) }
-            .catch { _ in Just(Data()) }
+            .tryMap { output in
+                guard !output.data.isEmpty else {
+                    throw URLError(.badServerResponse)
+                }
+                return output.data
+            }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] data in
-                guard !data.isEmpty else { return }
+            .sink { [weak self] completion in
+                if case .failure = completion {
+                    // Try an alternative favicon URL or keep the current favicon
+                    print("Failed to fetch favicon from \(url)")
+                }
+            } receiveValue: { [weak self] data in
                 self?.favicon = data
             }
             .store(in: &cancellables)
@@ -137,27 +146,24 @@ class Tab: Identifiable, Equatable, ObservableObject {
         self.webView = webView
         DispatchQueue.main.async {
             self.isPlayingAudio = false
+            self.applyZoom()
         }
         
-        // Setup navigation delegate
+        // Existing setup code...
         navigationDelegate = TabNavigationDelegate(tab: self)
         webView.navigationDelegate = navigationDelegate
-        
-        // Setup message handler for JavaScript communication
         setupAudioMessageHandler(webView)
-        
-        // Setup observers for WebView properties
         setupWebViewObservers()
-        
-        // Setup native media observers
         setupNativeMediaObservers()
-        
-        // Start JavaScript-based audio checking
         startAudioCheckTimer()
-        
-       
     }
-    
+    func startZoomIndicator() {
+        isZooming = true
+        zoomIndicatorTimer?.invalidate()
+        zoomIndicatorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+            self?.isZooming = false
+        }
+    }
     // MARK: - Native Media Observers
     private func setupNativeMediaObservers() {
 //        guard let webView = webView else { return }
@@ -522,13 +528,10 @@ class Tab: Identifiable, Equatable, ObservableObject {
                 guard let self = self else { return }
                 DispatchQueue.main.async {
                     let newURL = webView.url
-                    
                     if self.lastKnownURL != newURL {
                         self.url = newURL
                         self.lastKnownURL = newURL
                         self.isPlayingAudio = false
-                       
-                        
                         // Install enhanced detection after page loads
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                             self.installEnhancedAudioDetection()
@@ -544,7 +547,6 @@ class Tab: Identifiable, Equatable, ObservableObject {
                 guard let self = self else { return }
                 DispatchQueue.main.async {
                     self.isLoading = webView.isLoading
-                    
                     if !webView.isLoading {
                         // Page finished loading, install detection
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -562,6 +564,28 @@ class Tab: Identifiable, Equatable, ObservableObject {
                     if let title = webView.title, !title.isEmpty {
                         self?.title = title
                     }
+                }
+            }
+        )
+        
+        // Observe canGoBack
+        webViewObservers.append(
+            webView.observe(\.canGoBack, options: [.new]) { [weak self] webView, change in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.canGoBack = webView.canGoBack
+                    print("🔄 Tab \(self.id): canGoBack updated to \(self.canGoBack)")
+                }
+            }
+        )
+        
+        // Observe canGoForward
+        webViewObservers.append(
+            webView.observe(\.canGoForward, options: [.new]) { [weak self] webView, change in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.canGoForward = webView.canGoForward
+                    print("🔄 Tab \(self.id): canGoForward updated to \(self.canGoForward)")
                 }
             }
         )
@@ -635,11 +659,63 @@ class Tab: Identifiable, Equatable, ObservableObject {
         stopAudioCheckTimer()
     }
     
+    func setZoomLevel(_ newZoomLevel: CGFloat) {
+            let clampedZoom = max(minZoomLevel, min(newZoomLevel, maxZoomLevel))
+            guard zoomLevel != clampedZoom else { return }
+            
+            zoomLevel = clampedZoom
+            startZoomIndicator()
+            applyZoom()
+        }
+
+        // Increase zoom level
+        func zoomIn() {
+            setZoomLevel(zoomLevel + zoomStep)
+        }
+
+        // Decrease zoom level
+        func zoomOut() {
+            setZoomLevel(zoomLevel - zoomStep)
+        }
+
+        // Reset zoom to default (100%)
+        func resetZoom() {
+            setZoomLevel(1.0)
+        }
+
+        // Apply zoom to the webView
+        private func applyZoom() {
+            guard let webView = webView else { return }
+            
+            DispatchQueue.main.async {
+                webView.setMagnification(self.zoomLevel, centeredAt: .zero)
+                print("🔍 Applied zoom level: \(self.zoomLevel) to tab: \(self.title)")
+                
+                // Optionally inject JavaScript to adjust viewport for better compatibility
+                let js = """
+                (function() {
+                    let meta = document.querySelector('meta[name="viewport"]');
+                    if (!meta) {
+                        meta = document.createElement('meta');
+                        meta.name = 'viewport';
+                        document.head.appendChild(meta);
+                    }
+                    meta.content = 'width=device-width, initial-scale=\(self.zoomLevel), user-scalable=yes';
+                })();
+                """
+                webView.evaluateJavaScript(js) { _, error in
+                    if let error = error {
+                        print("❌ Failed to adjust viewport: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    
     deinit {
+        zoomIndicatorTimer?.invalidate()
         if let webView = self.webView {
             cleanupWebView(webView)
         }
-        print("🗑️ Tab deinit: \(title)")
     }
 }
 
@@ -674,25 +750,37 @@ class TabNavigationDelegate: NSObject, WKNavigationDelegate {
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         print("🔄 Navigation finished for: \(self.tab?.title ?? "unknown")")
-        // Install detection after page fully loads
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.tab?.installEnhancedAudioDetection()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let tab = self.tab else { return }
+            tab.canGoBack = webView.canGoBack
+            tab.canGoForward = webView.canGoForward
+            print("🔄 Tab \(tab.id): canGoBack = \(tab.canGoBack), canGoForward = \(tab.canGoForward)")
+            // Install detection after page fully loads
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                tab.installEnhancedAudioDetection()
+            }
         }
     }
     
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         print("🔄 Navigation committed")
-        DispatchQueue.main.async {
-            self.tab?.isPlayingAudio = false
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let tab = self.tab else { return }
+            tab.isPlayingAudio = false
+            tab.canGoBack = webView.canGoBack
+            tab.canGoForward = webView.canGoForward
+            print("🔄 Tab \(tab.id): canGoBack = \(tab.canGoBack), canGoForward = \(tab.canGoForward)")
         }
     }
     
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         print("🔄 Navigation started")
-        DispatchQueue.main.async {
-            self.tab?.isPlayingAudio = false
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let tab = self.tab else { return }
+            tab.isPlayingAudio = false
+            tab.canGoBack = webView.canGoBack
+            tab.canGoForward = webView.canGoForward
+            print("🔄 Tab \(tab.id): canGoBack = \(tab.canGoBack), canGoForward = \(tab.canGoForward)")
         }
     }
-    
-    
 }

@@ -39,6 +39,11 @@ class DIContainer: ObservableObject {
         )
     }
     @MainActor
+    func makeVelaPilotViewModel(with browserViewModel: BrowserViewModel, with bookMarkViewModel: BookmarkViewModel) -> VelaPilotViewModel {
+        return VelaPilotViewModel(broswerViewModel: browserViewModel, bookmarkViewModel: bookMarkViewModel)
+    }
+    
+    @MainActor
     func makeSuggestionViewModel() -> SuggestionViewModel {
         return SuggestionViewModel()
     }

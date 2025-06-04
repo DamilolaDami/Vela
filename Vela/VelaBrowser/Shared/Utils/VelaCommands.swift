@@ -113,17 +113,17 @@ struct VelaCommands: Commands {
             .keyboardShortcut("[", modifiers: [.command, .shift])
             
             Button("Zoom In") {
-              //  appDelegate.browserViewModel?.zoomIn()
+                appDelegate.browserViewModel?.zoomIn()
             }
             .keyboardShortcut("+", modifiers: .command)
             
             Button("Zoom Out") {
-             //   appDelegate.browserViewModel?.zoomOut()
+               appDelegate.browserViewModel?.zoomOut()
             }
             .keyboardShortcut("-", modifiers: .command)
             
             Button("Reset Zoom") {
-               // appDelegate.browserViewModel?.resetZoom()
+             appDelegate.browserViewModel?.resetZoom()
             }
             .keyboardShortcut("0", modifiers: .command)
         }
@@ -171,6 +171,14 @@ struct VelaCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
             }
         }
+        CommandMenu("VelaPilot") {
+            Button((appDelegate.browserViewModel?.showCommandPalette ?? false) ? "Hide Vela Pilot" : "Show Vela Pilot") {
+                appDelegate.browserViewModel?.showCommandPalette.toggle()
+            }
+            .keyboardShortcut("k", modifiers: .command)
+           
+        }
+        
         
         // History Menu
         CommandMenu("History") {
@@ -357,41 +365,7 @@ struct VelaCommands: Commands {
             }
             .keyboardShortcut("s", modifiers: [.command, .control])
         }
-        // Tools Menu
-        CommandMenu("Tools") {
-            Button("Open Developer Tools") {
-               // appDelegate.browserViewModel?.openDeveloperTools()
-            }
-            .keyboardShortcut("i", modifiers: [.command, .option])
-            
-            Button("Toggle Responsive Design Mode") {
-              //  appDelegate.browserViewModel?.toggleResponsiveDesignMode()
-            }
-            .keyboardShortcut("r", modifiers: [.command, .option])
-            
-            Divider()
-            
-            Button("View Source") {
-            //    appDelegate.browserViewModel?.viewPageSource()
-            }
-            .keyboardShortcut("u", modifiers: .command)
-            
-            Button("Inspect Element") {
-              //  appDelegate.browserViewModel?.inspectElement()
-            }
-            .keyboardShortcut("c", modifiers: [.command, .option])
-            
-            Divider()
-            
-            Button("Clear Cache") {
-              //  appDelegate.browserViewModel?.clearCache()
-            }
-            
-            Button("Clear Cookies") {
-            //    appDelegate.browserViewModel?.clearCookies()
-            }
-        }
-        
+     
         // Window Menu
         CommandMenu("Window") {
             Button("Minimize") {

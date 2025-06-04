@@ -44,10 +44,9 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @MainActor func windowWillEnterFullScreen(_ notification: Notification) {
         if let window = notification.object as? NSWindow {
             browserViewModel?.toggleFullScreen(true)
-            print("Window will enter full-screen mode, frame: \(window.frame)")
             DispatchQueue.main.async {
-                window.contentView?.frame = window.frame // Force content view to match
-                window.contentView?.needsLayout = true // Trigger layout update
+                window.contentView?.frame = window.frame
+                window.contentView?.needsLayout = true
             }
         }
     }
@@ -55,7 +54,6 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @MainActor func windowWillExitFullScreen(_ notification: Notification) {
         if let window = notification.object as? NSWindow {
             browserViewModel?.toggleFullScreen(false)
-            print("Window will exit full-screen mode, frame: \(window.frame)")
             DispatchQueue.main.async {
                 window.contentView?.frame = window.frame
                 window.contentView?.needsLayout = true
@@ -65,14 +63,12 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func windowDidResize(_ notification: Notification) {
         if let window = notification.object as? NSWindow {
-            print("Window resized to: \(window.frame)")
             window.contentView?.needsLayout = true // Ensure content view updates
         }
     }
     
     // MARK: - Menu Actions
     @MainActor @objc func newTab(_ sender: Any?) {
-        print("Menu action: New Tab")
         browserViewModel?.createNewTab(shouldReloadTabs: true)
     }
     
