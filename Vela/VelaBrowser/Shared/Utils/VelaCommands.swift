@@ -365,35 +365,6 @@ struct VelaCommands: Commands {
             }
             .keyboardShortcut("s", modifiers: [.command, .control])
         }
-     
-        // Window Menu
-        CommandMenu("Window") {
-            Button("Minimize") {
-              //  appDelegate.minimizeWindow(nil)
-            }
-            .keyboardShortcut("m", modifiers: .command)
-            
-            Button("Zoom") {
-            //    appDelegate.zoomWindow(nil)
-            }
-            
-            Divider()
-            
-            Button("Show All Windows") {
-                // TODO: Implement show all windows
-            }
-            
-            Button("Cycle Through Windows") {
-                // TODO: Implement cycle through windows
-            }
-            .keyboardShortcut("`", modifiers: .command)
-            
-            Divider()
-            
-            Button("Bring All to Front") {
-                // TODO: Implement bring all to front
-            }
-        }
     }
 }
 

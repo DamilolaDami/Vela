@@ -75,10 +75,14 @@ struct ActionButtonsRow: View {
             )
             
             // Settings button
-            SettingsButton(showSettings: $showSettings, viewModel: viewModel)
+            
+            if viewModel.currentTab?.url != nil {
+                SettingsButton(showSettings: $showSettings, viewModel: viewModel)
+            }
             
            
         }
+        .animation(.spring, value: viewModel.currentTab?.url != nil)
     }
 }
 

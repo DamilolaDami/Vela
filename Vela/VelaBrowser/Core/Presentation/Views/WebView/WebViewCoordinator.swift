@@ -623,7 +623,7 @@ extension BrowserViewModel {
             
             // Create coordinator for the web view
             let coordinator = WebViewCoordinator(
-                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self),
+                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self, noteViewModel: self.noteboardVM),
                 tab: newTab
             )
             coordinator.browserViewModel = self

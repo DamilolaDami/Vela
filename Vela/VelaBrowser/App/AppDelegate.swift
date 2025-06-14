@@ -12,6 +12,8 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var browserViewModel: BrowserViewModel?
     var bookmarkViewModel: BookmarkViewModel?
     private var keyEventMonitor: Any?
+    var quitHandler: (() -> Void)?
+    private var shouldQuit = false
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupAppearance()
@@ -22,6 +24,22 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.collectionBehavior.insert(.fullScreenPrimary) // Allow full-screen mode
         }
     }
+    
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+         // If we've already confirmed quit, allow termination
+         if shouldQuit {
+             return .terminateNow
+         }
+         
+         // Otherwise, show the dialog and cancel for now
+         quitHandler?()
+         return .terminateCancel
+     }
+     
+     func confirmQuit() {
+         shouldQuit = true
+         NSApplication.shared.terminate(self)
+     }
     
     
 //    func hideTitleBar() {

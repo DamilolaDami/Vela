@@ -135,7 +135,7 @@ struct TabsSection: View {
                         PinnedTabRow(
                             viewModel: viewModel,
                             tab: tab,
-                            isSelected: tab.id == viewModel.currentTab?.id,
+                            isSelected: tab.id == viewModel.currentTab?.id && !viewModel.isInBoardMode,
                             isHovered: hoveredTab == tab.id,
                             onSelect: { viewModel.selectTab(tab) },
                             onHover: { isHovering in
@@ -156,7 +156,7 @@ struct TabsSection: View {
                     viewModel: viewModel,
                     previewManager: previewManager,
                     tab: tab,
-                    isSelected: tab.id == viewModel.currentTab?.id,
+                    isSelected: tab.id == viewModel.currentTab?.id && !viewModel.isInBoardMode,
                     isHovered: hoveredTab == tab.id,
                     onSelect: { viewModel.selectTab(tab) },
                     onClose: { viewModel.closeAndDeleteTab(tab) },

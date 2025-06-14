@@ -5,11 +5,13 @@ import WebKit
 class CustomAudioObservingWebView: AudioObservingWebView {
     var contextualMenuAction: ContextualMenuAction?
     weak var browserViewModel: BrowserViewModel?
+    weak var noteboardViewModel: NoteBoardViewModel?
 
     enum ContextualMenuAction {
         case openInNewTab
         case openInNewWindow
         case download
+        case addToNoteboard
     }
 
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
@@ -54,13 +56,38 @@ class CustomAudioObservingWebView: AudioObservingWebView {
             }
         }
 
+        // Add "Add to Noteboard" button to all context menus
+        let addToNoteboardAction = #selector(processMenuItem(_:))
+        let noteboardMenuItem = NSMenuItem(title: "Add to Noteboard", action: addToNoteboardAction, keyEquivalent: "")
+        noteboardMenuItem.identifier = NSUserInterfaceItemIdentifier("addToNoteboard")
+        noteboardMenuItem.target = self
+        
+        // Add separator before our custom item for better visual separation
+        if !items.isEmpty {
+            items.append(NSMenuItem.separator())
+        }
+        items.append(noteboardMenuItem)
+
         menu.items = items
     }
 
     @objc func processMenuItem(_ menuItem: NSMenuItem) {
         self.contextualMenuAction = nil
 
-        guard let originalMenuItem = menuItem.representedObject as? NSMenuItem else { return }
+        guard let originalMenuItem = menuItem.representedObject as? NSMenuItem else {
+            // Handle our custom menu items that don't have representedObject
+            if let identifier = menuItem.identifier?.rawValue {
+                switch identifier {
+                case "addToNoteboard":
+                    self.contextualMenuAction = .addToNoteboard
+                    handleAddToNoteboard()
+                    return
+                default:
+                    break
+                }
+            }
+            return
+        }
 
         if let identifier = menuItem.identifier?.rawValue {
             print("originalMenuItem identifier: \(identifier)")
@@ -76,7 +103,6 @@ class CustomAudioObservingWebView: AudioObservingWebView {
 
         // Trigger the original action if it's a download
         if contextualMenuAction == .download {
-          
             if let url = self.contextualMenuActionURL {
                 print("contextualMenuActionURL-2: \(url)")
                 browserViewModel?.initiateDownload(from: url)
@@ -84,6 +110,25 @@ class CustomAudioObservingWebView: AudioObservingWebView {
         } else if let action = originalMenuItem.action {
             print("action-2: \(action)")
             originalMenuItem.target?.perform(action, with: originalMenuItem)
+        }
+    }
+
+    private func handleAddToNoteboard() {
+        // Get the current page information
+        let currentURL = self.url?.absoluteString ?? ""
+        let currentTitle = self.title ?? "Untitled"
+        
+        // You can also get selected text if needed
+        evaluateJavaScript("window.getSelection().toString()") { [weak self] result, error in
+            let selectedText = result as? String ?? ""
+            
+            DispatchQueue.main.async {
+                self?.browserViewModel?.addToNoteboard(
+                    title: currentTitle,
+                    url: currentURL,
+                    selectedText: selectedText
+                )
+            }
         }
     }
 
@@ -111,6 +156,8 @@ struct WebViewRepresentable: NSViewRepresentable {
     @Binding var isLoading: Bool
     @Binding var estimatedProgress: Double
     let browserViewModel: BrowserViewModel
+    let noteViewModel: NoteBoardViewModel
+ 
 
   
     func makeNSView(context: Context) -> WKWebView {
@@ -203,7 +250,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             
             // IMPORTANT: Set the browserViewModel reference for contextual menu
             audioWebView.browserViewModel = browserViewModel
-            
+            audioWebView.noteboardViewModel = noteViewModel
             tab.setWebView(audioWebView)
             webView = audioWebView
         }
@@ -272,6 +319,25 @@ extension BrowserViewModel {
         let request = URLRequest(url: url)
         webView.load(request) // This should trigger the download policy decision
     }
+    
+    // New method to handle adding items to noteboard
+    func addToNoteboard(title: String, url: String, selectedText: String) {
+        print("Adding to Noteboard:")
+        print("  Title: \(title)")
+        print("  URL: \(url)")
+        print("  Selected Text: \(selectedText)")
+        let noteBoardNote = NoteBoardNote(id: UUID(),
+                                          content: selectedText,
+                                          createdAt: Date(),
+                                          updatedAt: Date(),
+                                          sourceUrl: url,
+                                          tabTitle: title,
+                                          tags: [],
+                                          pinned: false,
+                                          archived: false)
+        self.noteboardVM.createNote(noteBoardNote)
+    }
+    
     func clearAllWebsiteData() async {
         let dataStore = WKWebsiteDataStore.default()
         let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()

@@ -689,8 +689,6 @@ class Tab: Identifiable, Equatable, ObservableObject {
             
             DispatchQueue.main.async {
                 webView.setMagnification(self.zoomLevel, centeredAt: .zero)
-                print("🔍 Applied zoom level: \(self.zoomLevel) to tab: \(self.title)")
-                
                 // Optionally inject JavaScript to adjust viewport for better compatibility
                 let js = """
                 (function() {

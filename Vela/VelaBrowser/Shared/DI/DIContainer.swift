@@ -12,6 +12,14 @@ class DIContainer: ObservableObject {
     func makeSpaceRepository() -> SpaceRepositoryProtocol {
         return SpaceRepository(context:PersistenceController.shared.context.mainContext)
     }
+    @MainActor
+    func makeNoteBoardRepository() -> NoteBoardRepositoryProtocol {
+        return NoteBoardRepository(context:PersistenceController.shared.context.mainContext)
+    }
+    @MainActor
+    func makeNoteNoardNotesRepository() -> NoteBoardNoteRepositoryProtocol {
+        return NoteBoardNoteRepository(context:PersistenceController.shared.context.mainContext)
+    }
     
     @MainActor
     func makeCreateTabUseCase() -> CreateTabUseCaseProtocol {
@@ -22,14 +30,22 @@ class DIContainer: ObservableObject {
     func makeBookmarkRepository() -> BookmarkRepositoryProtocol {
         return BookmarkRepository(context:PersistenceController.shared.context.mainContext)
     }
+    //NoteBoardViewModel
+    @MainActor
+    func makeNoteBoardViewModel() -> NoteBoardViewModel {
+        return NoteBoardViewModel(
+            boardRepository: makeNoteBoardRepository(), noteRepository: makeNoteNoardNotesRepository()
+        )
+    }
     
     
     @MainActor
-    func makeBrowserViewModel() -> BrowserViewModel {
+    func makeBrowserViewModel(with noteBoardViewModel: NoteBoardViewModel) -> BrowserViewModel {
         return BrowserViewModel(
             createTabUseCase: makeCreateTabUseCase(),
             tabRepository: makeTabRepository(),
-            spaceRepository: makeSpaceRepository()
+            spaceRepository: makeSpaceRepository(),
+            noteboardVM: noteBoardViewModel
         )
     }
     @MainActor

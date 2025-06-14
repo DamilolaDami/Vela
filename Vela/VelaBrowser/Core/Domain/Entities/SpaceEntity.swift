@@ -12,7 +12,7 @@ class SpaceEntity {
     
     // Relationships
     @Relationship(inverse: \TabEntity.space) var tabs: [TabEntity]?
-    
+    @Relationship var boards: [NoteBoardEntity]? 
     init(from space: Space) {
         self.id = space.id
         self.name = space.name
@@ -48,3 +48,5 @@ class SpaceEntity {
         self.isDefault = space.isDefault
     }
 }
+
+

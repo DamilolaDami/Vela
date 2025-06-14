@@ -173,4 +173,5 @@ enum RepositoryError: Error {
     case notFound
     case unknown
     case invalidData
+    case spaceNotFound
 }

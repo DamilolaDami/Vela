@@ -13,11 +13,14 @@ struct BrowserView: View {
     @StateObject private var previewManager = TabPreviewManager()
     @StateObject private var suggestionViewModel: SuggestionViewModel
     @StateObject private var velaPilotViewModel: VelaPilotViewModel
-    init(viewModel: BrowserViewModel, bookMarkViewModel: BookmarkViewModel, suggestionViewModel: SuggestionViewModel, velaPilotViewModel: VelaPilotViewModel) {
+    @StateObject private var noteBoardVM: NoteBoardViewModel
+    @EnvironmentObject private var quitManager: QuitManager
+    init(viewModel: BrowserViewModel, bookMarkViewModel: BookmarkViewModel, suggestionViewModel: SuggestionViewModel, velaPilotViewModel: VelaPilotViewModel, noteBoardVM: NoteBoardViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
         self._bookMarkViewModel = StateObject(wrappedValue: bookMarkViewModel)
         self._suggestionViewModel = StateObject(wrappedValue: suggestionViewModel)
         self._velaPilotViewModel = StateObject(wrappedValue: velaPilotViewModel)
+        self._noteBoardVM = StateObject(wrappedValue: noteBoardVM)
     }
     
     var body: some View {
@@ -25,37 +28,51 @@ struct BrowserView: View {
             VStack(spacing: 0) {
                 NavigationSplitView(columnVisibility: $viewModel.columnVisibility) {
                     // Sidebar
-                    SidebarView(viewModel: viewModel, previewManager: previewManager)
+                    SidebarView(viewModel: viewModel, previewManager: previewManager, boardVM: viewModel.noteboardVM)
                         .frame(minWidth: 280, maxWidth: 320)
                         .navigationSplitViewColumnWidth(280)
                 } detail: {
                     // Main Content
                     VStack(spacing: 0) {
-                        BrowserToolbar(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel, suggestionVM: suggestionViewModel)
-                        if viewModel.currentTab != nil {
-                            if (viewModel.currentTab?.webView != nil){
-                                WebViewContainer(viewModel: viewModel)
-                            }else{
-                                Text("no WebView")
+                        if !viewModel.isInBoardMode {
+                            // Browser mode - show toolbar and web content
+                            BrowserToolbar(
+                                viewModel: viewModel,
+                                bookmarkViewModel: bookMarkViewModel,
+                                suggestionVM: suggestionViewModel
+                            )
+                            
+                            if viewModel.currentTab != nil {
+                                if viewModel.currentTab?.webView != nil {
+                                    // Active tab with web view
+                                    WebViewContainer(
+                                        viewModel: viewModel,
+                                        noteBoardViewModel: noteBoardVM
+                                    )
+                                }
+                            } else {
+                                // No active tab - show start page
+                                StartPageView(viewModel: viewModel)
                             }
                         } else {
-                            StartPageView(viewModel: viewModel)
+                            // Board mode - show note board
+                            BoardView(boardVM: viewModel.noteboardVM)
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity) // Fill available space
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
                     
                                     .toolbar(content: {
                                         ToolbarItem(placement: .principal) {
-                                            if let currentTab = viewModel.currentTab{
-                                                if currentTab.isLoading {
+                                            if let currentTab = viewModel.currentTab {
+                                                if currentTab.isLoading && !viewModel.isInBoardMode{
                                                     VelaProgressIndicator(progress: viewModel.estimatedProgress)
                                                 }
                                             }
                                         }
                                     })
                     .overlay(alignment: .top) {
-                        if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty {
+                        if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty && !viewModel.isInBoardMode {
                             SuggestionsListView(
                                 suggestionViewModel: suggestionViewModel,
                                 onSuggestionSelected: { selectedURL in
@@ -88,6 +105,9 @@ struct BrowserView: View {
                         viewModel.showCommandPalette = false
                         return .handled
                     }
+            }
+            .sheet(isPresented: $quitManager.showingQuitDialog) {
+                QuitDialog()
             }
             
            

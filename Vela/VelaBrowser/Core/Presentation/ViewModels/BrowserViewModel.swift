@@ -26,6 +26,10 @@ class BrowserViewModel: ObservableObject {
     @Published var isPopupBlockingEnabled: Bool = true
     @Published var isIncognitoMode: Bool = false
     @Published var showCommandPalette = false
+    @Published var noteboardVM: NoteBoardViewModel
+    @Published var previousSpace: Space?
+    @Published var isInBoardMode: Bool = false
+
     private var popupWindows: [WKWebView: NSWindow] = [:]
     
     // Cache to track loaded tabs for each space
@@ -50,11 +54,13 @@ class BrowserViewModel: ObservableObject {
     init(
         createTabUseCase: CreateTabUseCaseProtocol,
         tabRepository: TabRepositoryProtocol,
-        spaceRepository: SpaceRepositoryProtocol
+        spaceRepository: SpaceRepositoryProtocol,
+        noteboardVM: NoteBoardViewModel
     ) {
         self.createTabUseCase = createTabUseCase
         self.tabRepository = tabRepository
         self.spaceRepository = spaceRepository
+        self.noteboardVM = noteboardVM
         setupInitialState()
         setupBindings()
     }
@@ -88,25 +94,33 @@ class BrowserViewModel: ObservableObject {
     }
     
     private func setupBindings() {
-        $currentTab
-            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
-            .sink { [weak self] tab in
-                guard let self = self, !self.isEditing else { return }
-                self.addressText = tab?.url?.absoluteString ?? ""
-                self.isLoading = tab?.isLoading ?? false
-            }
-            .store(in: &cancellables)
-        
         $currentSpace
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] space in
                 guard let self = self else { return }
                 if let spaceId = space?.id {
                     UserDefaults.standard.set(spaceId.uuidString, forKey: UserDefaultsKeys.lastSelectedSpaceId)
+                    // Only update NoteBoardViewModel if we're not in board mode
+                    if !self.isInBoardMode, let space = space {
+                        self.noteboardVM.loadBoards(for: space)
+                    }
                 } else {
                     UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.lastSelectedSpaceId)
                 }
-                self.loadTabsForCurrentSpace()
+                
+                // Only load tabs if we're not in board mode
+                if !self.isInBoardMode {
+                    self.loadTabsForCurrentSpace()
+                }
+            }
+            .store(in: &cancellables)
+        
+        $currentTab
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+            .sink { [weak self] tab in
+                guard let self = self, !self.isEditing else { return }
+                self.addressText = tab?.url?.absoluteString ?? ""
+                self.isLoading = tab?.isLoading ?? false
             }
             .store(in: &cancellables)
     }
@@ -171,6 +185,18 @@ class BrowserViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
+    func exitBoardMode() {
+        isInBoardMode = false
+        self.noteboardVM.selectedBoard = nil
+        
+        // Restore the previous space if we had one
+        if let previous = previousSpace {
+            currentSpace = previous
+            previousSpace = nil
+        }
+    }
+
+    // Update the selectSpace method to handle board mode:
     func selectSpace(_ space: Space) {
         // Store current space's tabs in cache before switching
         if let currentSpaceId = currentSpace?.id {
@@ -178,9 +204,29 @@ class BrowserViewModel: ObservableObject {
             spaceTabsLoaded.insert(currentSpaceId)
         }
         
+        // Exit board mode when selecting a space
+        if isInBoardMode {
+            exitBoardMode()
+        }
+        
         currentSpace = space
         loadTabsForCurrentSpace()
     }
+
+    func selectBoard(_ board: NoteBoard) {
+        // Store the current space before switching to board mode
+        if !isInBoardMode {
+            previousSpace = currentSpace
+        }
+        
+        isInBoardMode = true
+        
+        // Don't set currentSpace to nil - this was causing the issue
+        // Instead, just update the selected board
+        self.noteboardVM.selectedBoard = board
+       
+    }
+
     
     private func loadSpaces() {
         spaceRepository.getAllSpaces()
@@ -290,6 +336,12 @@ class BrowserViewModel: ObservableObject {
     
     func selectTab(_ tab: Tab) {
         currentTab?.isLoading = false
+        
+        // Exit board mode when selecting a tab
+        if isInBoardMode {
+            exitBoardMode()
+        }
+        
         if tab.webView == nil {
             let configuration = WKWebViewConfiguration()
             configuration.defaultWebpagePreferences.allowsContentJavaScript = true

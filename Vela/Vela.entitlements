@@ -38,5 +38,7 @@
 	<true/>
 	<key>com.apple.security.print</key>
 	<true/>
+        <key>com.apple.developer.icloud-container-environment</key>
+        <string>Production</string>
 </dict>
 </plist>

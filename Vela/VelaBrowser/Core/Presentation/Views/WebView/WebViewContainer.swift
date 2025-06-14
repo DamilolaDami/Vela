@@ -3,6 +3,7 @@ import WebKit
 
 struct WebViewContainer: View {
     @ObservedObject var viewModel: BrowserViewModel
+    @ObservedObject var noteBoardViewModel: NoteBoardViewModel
     @State private var hasInitialLoad = false
 
     var body: some View {
@@ -12,7 +13,9 @@ struct WebViewContainer: View {
                     tab: currentTab,
                     isLoading: $viewModel.isWebsiteLoading,
                     estimatedProgress: $viewModel.estimatedProgress,
-                    browserViewModel: viewModel
+                    browserViewModel: viewModel,
+                    noteViewModel: noteBoardViewModel
+                
                 )
                 .id(currentTab.id)
                 
