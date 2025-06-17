@@ -27,6 +27,7 @@ class BrowserViewModel: ObservableObject {
     @Published var isIncognitoMode: Bool = false
     @Published var showCommandPalette = false
     @Published var noteboardVM: NoteBoardViewModel
+    @Published var suggestionVM: SuggestionViewModel
     @Published var previousSpace: Space?
     @Published var isInBoardMode: Bool = false
 
@@ -55,12 +56,14 @@ class BrowserViewModel: ObservableObject {
         createTabUseCase: CreateTabUseCaseProtocol,
         tabRepository: TabRepositoryProtocol,
         spaceRepository: SpaceRepositoryProtocol,
-        noteboardVM: NoteBoardViewModel
+        noteboardVM: NoteBoardViewModel,
+        suggestionVM: SuggestionViewModel
     ) {
         self.createTabUseCase = createTabUseCase
         self.tabRepository = tabRepository
         self.spaceRepository = spaceRepository
         self.noteboardVM = noteboardVM
+        self.suggestionVM = suggestionVM
         setupInitialState()
         setupBindings()
     }
@@ -677,6 +680,7 @@ class BrowserViewModel: ObservableObject {
     }
     
     func navigateToURL() {
+        
         guard !addressText.isEmpty else { return }
 
         isLoading = true

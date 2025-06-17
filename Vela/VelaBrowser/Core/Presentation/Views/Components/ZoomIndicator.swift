@@ -18,11 +18,11 @@ struct ZoomIndicator: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.secondary)
+                .foregroundColor(.black)
             
             Text("\(Int(zoomLevel * 100))%")
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundColor(.primary)
+                .foregroundColor(.black)
                 .monospacedDigit()
         }
         .padding(.horizontal, 12)

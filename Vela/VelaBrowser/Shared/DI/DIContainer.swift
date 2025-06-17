@@ -37,15 +37,17 @@ class DIContainer: ObservableObject {
             boardRepository: makeNoteBoardRepository(), noteRepository: makeNoteNoardNotesRepository()
         )
     }
-    
+  
     
     @MainActor
-    func makeBrowserViewModel(with noteBoardViewModel: NoteBoardViewModel) -> BrowserViewModel {
+    func makeBrowserViewModel(with noteBoardViewModel: NoteBoardViewModel, with suggestionViewModel: SuggestionViewModel) -> BrowserViewModel {
         return BrowserViewModel(
             createTabUseCase: makeCreateTabUseCase(),
             tabRepository: makeTabRepository(),
             spaceRepository: makeSpaceRepository(),
-            noteboardVM: noteBoardViewModel
+            noteboardVM: noteBoardViewModel,
+            suggestionVM: suggestionViewModel
+            
         )
     }
     @MainActor

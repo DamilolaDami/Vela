@@ -47,7 +47,7 @@ struct BrowserView: View {
                                     // Active tab with web view
                                     WebViewContainer(
                                         viewModel: viewModel,
-                                        noteBoardViewModel: noteBoardVM
+                                        noteBoardViewModel: noteBoardVM, suggestionViewModel: suggestionViewModel
                                     )
                                 }
                             } else {
@@ -71,6 +71,16 @@ struct BrowserView: View {
                                             }
                                         }
                                     })
+                    // Background overlay for dismissing suggestions
+                    .background {
+                        if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty && !viewModel.isInBoardMode {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    suggestionViewModel.isShowingSuggestions = false
+                                }
+                        }
+                    }
                     .overlay(alignment: .top) {
                         if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty && !viewModel.isInBoardMode {
                             SuggestionsListView(
@@ -89,6 +99,7 @@ struct BrowserView: View {
                             .offset(y: 48)
                         }
                     }
+
                 }
             }
             
@@ -112,7 +123,6 @@ struct BrowserView: View {
             
            
         }
-       
         
     }
    

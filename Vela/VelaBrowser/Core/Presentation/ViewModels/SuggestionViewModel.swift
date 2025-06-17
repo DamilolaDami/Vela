@@ -118,6 +118,30 @@ class SuggestionViewModel: ObservableObject {
             return
         }
 
+        // Helper function to validate domain/URL
+        func isValidDomain(_ query: String) -> Bool {
+            let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
+            // Simple regex for domain-like strings (e.g., google.com, www.google.com)
+            let domainRegex = "^([a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}$"
+            let urlRegex = "^(https?://)?([a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}(/.*)?$"
+            
+            let domainPredicate = NSPredicate(format: "SELF MATCHES %@", domainRegex)
+            let urlPredicate = NSPredicate(format: "SELF MATCHES %@", urlRegex)
+            
+            return domainPredicate.evaluate(with: trimmedQuery) || urlPredicate.evaluate(with: trimmedQuery)
+        }
+
+        // Check if query is a domain/URL
+        let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
+        if isValidDomain(trimmedQuery) {
+            // Ensure the URL has a scheme (default to https)
+            let normalizedURL = trimmedQuery.hasPrefix("http://") || trimmedQuery.hasPrefix("https://") ? trimmedQuery : "https://\(trimmedQuery)"
+            let suggestion = SearchSuggestion(title: trimmedQuery, subtitle: nil, url: normalizedURL, type: .url)
+            suggestionCache[query.lowercased()] = [suggestion]
+            completion([suggestion])
+            return
+        }
+
         // Cancel previous task
         currentTask?.cancel()
 
@@ -154,5 +178,13 @@ class SuggestionViewModel: ObservableObject {
         if suggestionCache.count > 100 {
             suggestionCache = Dictionary(uniqueKeysWithValues: suggestionCache.suffix(100))
         }
+    }
+    
+    func cancelSuggestions() {
+        DispatchQueue.main.async {
+            self.isShowingSuggestions = false
+        }
+        currentTask?.cancel()
+        currentTask = nil
     }
 }

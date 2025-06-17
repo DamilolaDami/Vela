@@ -85,9 +85,9 @@ struct QuickAccessButton: View {
                             Color(NSColor.controlAccentColor).opacity(0.15) :
                             item.color.opacity(0.1)
                         )
-                        .frame(width: 40, height: 40)
+                        .frame(width: 55, height: 55)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: 14)
                                 .stroke(
                                     isHovered ?
                                     Color(NSColor.controlAccentColor).opacity(0.3) :
@@ -120,9 +120,9 @@ struct QuickAccessButton: View {
         Group {
             if let iconURL = item.iconURL {
                 KFImage(URL(string: iconURL))
-                    .loadDiskFileSynchronously() // Load from disk cache synchronously
-                    .cacheMemoryOnly(false) // Enable disk caching
-                    .fade(duration: 0.1) // Reduce fade duration
+                    .loadDiskFileSynchronously()
+                    .cacheMemoryOnly(false)
+                    .fade(duration: 0.1)
                     .onSuccess { _ in
                         imageLoaded = true
                         

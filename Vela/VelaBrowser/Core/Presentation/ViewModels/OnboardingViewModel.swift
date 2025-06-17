@@ -17,7 +17,7 @@ class OnboardingViewModel {
         }
     }
     
-    private let userDefaultsKey = "hasSeenOnboardingV3"
+    private let userDefaultsKey = "hasSeenOnboardingV4"
     
     let steps: [OnboardingStep] = [
         OnboardingStep(

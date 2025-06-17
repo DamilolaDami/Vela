@@ -10,6 +10,7 @@ class ViewModelFactory: ObservableObject {
     private var _bookmarkViewModel: BookmarkViewModel?
     private var _velaPilotViewModel: VelaPilotViewModel?
     private var _noteboardVM: NoteBoardViewModel?
+    private var _suggestionViewModel: SuggestionViewModel?
    // private var _downloadViewModel: DownloadViewModel?
     
     init(container: DIContainer = .shared) {
@@ -22,7 +23,7 @@ class ViewModelFactory: ObservableObject {
             return existing
         }
         
-        let viewModel = container.makeBrowserViewModel(with: noteBoardViewModel)
+        let viewModel = container.makeBrowserViewModel(with: noteBoardViewModel, with: suggestionViewModel)
         _browserViewModel = viewModel
         return viewModel
     }
@@ -44,6 +45,15 @@ class ViewModelFactory: ObservableObject {
         
         let viewModel = container.makeNoteBoardViewModel()
         _noteboardVM = viewModel
+        return viewModel
+    }
+    var suggestionViewModel: SuggestionViewModel{
+        if let existing = _suggestionViewModel {
+            return existing
+        }
+        
+        let viewModel = container.makeSuggestionViewModel()
+        _suggestionViewModel = viewModel
         return viewModel
     }
     

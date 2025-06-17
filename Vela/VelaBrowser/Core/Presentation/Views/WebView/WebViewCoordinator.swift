@@ -1,12 +1,14 @@
 // MARK: - Fixed WebViewCoordinator with proper download support
-import WebKit
+@preconcurrency import WebKit
 import AppKit
 import Foundation
 import Combine
+import AVFAudio
 
 class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     var parent: WebViewRepresentable?
     var browserViewModel: BrowserViewModel?
+    var suggestionViewModel: SuggestionViewModel?
     private let tabId: UUID
     private var webView: WKWebView?
     private var isObserving = false
@@ -68,13 +70,14 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                 DispatchQueue.main.async {
                     webView.setMagnification(newZoomLevel, centeredAt: .zero)
                     tab.startZoomIndicator()
+                    self.parent?.suggestionViewModel.cancelSuggestions()
                 }
             }
     }
     // MARK: - URL Loading (unchanged)
     func loadURL(_ url: URL, in webView: WKWebView) {
         guard url != lastRequestedURL else { return }
-        
+        parent?.suggestionViewModel.cancelSuggestions()
         if let pending = pendingNavigation {
             if webView.url != url {
                 lastRequestedURL = url
@@ -115,6 +118,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                 if let newTitle = webView.title, !newTitle.isEmpty, tab.title != newTitle {
                     tab.title = newTitle
                     tabUpdated = true
+                    
                 } else if webView.title?.isEmpty == true || webView.title == nil {
                     tab.title = "Untitled"
                     tabUpdated = true
@@ -144,7 +148,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                     print("🎧 Audio state updated via _isPlayingAudio: \(isAudioPlaying)")
                 }
             }
-
+            parent.suggestionViewModel.cancelSuggestions()
             if tabUpdated {
                 self.browserViewModel?.updateTab(tab)
             }
@@ -166,6 +170,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             
             parent.tab.isLoading = true
             parent.isLoading = true
+            parent.suggestionViewModel.cancelSuggestions()
         }
     }
 
@@ -179,7 +184,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         }
         
         // Inject JavaScript to ensure full-screen API is available
-        let fullscreenScript = """
+        _ = """
         (function() {
             // Polyfill for requestFullscreen across all elements
             function enableFullscreen(element) {
@@ -236,7 +241,18 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             parent.tab.isLoading = false
             parent.isLoading = false
             parent.estimatedProgress = 1.0
+            parent.suggestionViewModel.cancelSuggestions()
             parent.tab.reloadFavicon()
+        }
+    }
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        if type == .microphone {
+            // On macOS, microphone permission is managed by system settings.
+            // Since we can't check permission status programmatically, assume permission is granted if prompt was shown previously.
+            // For better UX, you could show a custom dialog to inform the user.
+            decisionHandler(.prompt) // Show system prompt if not already granted
+        } else {
+            decisionHandler(.deny) // Deny other capture types (e.g., camera) if not needed
         }
     }
     
@@ -623,7 +639,7 @@ extension BrowserViewModel {
             
             // Create coordinator for the web view
             let coordinator = WebViewCoordinator(
-                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self, noteViewModel: self.noteboardVM),
+                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self, suggestionViewModel: self.suggestionVM, noteViewModel: self.noteboardVM),
                 tab: newTab
             )
             coordinator.browserViewModel = self

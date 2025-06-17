@@ -37,7 +37,10 @@ struct BrowserToolbar: View {
             AddressBar(
                 text: $viewModel.addressText,
                 isEditing: $viewModel.isEditing,
-                onCommit: viewModel.navigateToURL,
+                onCommit: {
+                    suggestionVM.cancelSuggestions()
+                    viewModel.navigateToURL()
+                },
                 currentURL: viewModel.currentTab?.url,
                 suggestionVM: suggestionVM
             )
@@ -83,7 +86,7 @@ struct BrowserToolbar: View {
                 AddBookmarkSheet(bookmarkViewModel: bookmarkViewModel)
             }
         }
-       
+        
        
     }
     
