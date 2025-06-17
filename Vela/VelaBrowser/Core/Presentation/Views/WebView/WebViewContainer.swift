@@ -3,6 +3,8 @@ import WebKit
 
 struct WebViewContainer: View {
     @ObservedObject var viewModel: BrowserViewModel
+    @ObservedObject var noteBoardViewModel: NoteBoardViewModel
+    @ObservedObject var suggestionViewModel: SuggestionViewModel
     @State private var hasInitialLoad = false
 
     var body: some View {
@@ -12,12 +14,23 @@ struct WebViewContainer: View {
                     tab: currentTab,
                     isLoading: $viewModel.isWebsiteLoading,
                     estimatedProgress: $viewModel.estimatedProgress,
-                    browserViewModel: viewModel
+                    browserViewModel: viewModel,
+                    suggestionViewModel: suggestionViewModel,
+                    noteViewModel: noteBoardViewModel
+                
                 )
                 .id(currentTab.id)
                 
             }
         }
+        .overlay(alignment: .topTrailing, content: {
+            Group {
+                if let tab = viewModel.currentTab, tab.isZooming {
+                    ZoomIndicator(zoomLevel: tab.zoomLevel, isZooming: tab.isZooming)
+                        .padding()
+                }
+            }
+        })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
            

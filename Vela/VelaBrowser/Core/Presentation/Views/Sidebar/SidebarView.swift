@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
+    @ObservedObject var boardVM: NoteBoardViewModel
     @State private var hoveredTab: UUID?
     
     var body: some View {
@@ -13,6 +14,9 @@ struct SidebarView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     QuickAccessGrid(viewModel: viewModel)
+                    NoteBoardSection(boardVM: boardVM, viewModel: viewModel, onBoardSelected: {
+                        viewModel.currentSpace = nil
+                    })
                     TabsSection(
                         viewModel: viewModel, previewManager: previewManager,
                         hoveredTab: $hoveredTab

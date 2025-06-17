@@ -183,3 +183,98 @@ extension TabPreview {
 }
 
 
+
+
+public extension URLValidator {
+    
+    /// Predefined configurations for common use cases
+    enum Preset {
+        /// Strict validation for production environments
+        public static var strict: Configuration {
+            return Configuration(
+                allowedSchemes: ["https"],
+                allowLocalhost: false,
+                allowIPAddresses: false,
+                requireTLD: true,
+                performDNSValidation: true
+            )
+        }
+        
+        /// Relaxed validation for development
+        public static var development: Configuration {
+            return Configuration(
+                allowedSchemes: ["http", "https"],
+                allowLocalhost: true,
+                allowIPAddresses: true,
+                requireTLD: false,
+                performDNSValidation: false
+            )
+        }
+        
+        /// Web browser compatible validation
+        public static var browser: Configuration {
+            return Configuration(
+                allowedSchemes: ["http", "https"],
+                allowLocalhost: true,
+                allowIPAddresses: true,
+                requireTLD: true,
+                performDNSValidation: false
+            )
+        }
+        
+        /// API endpoint validation
+        public static var api: Configuration {
+            return Configuration(
+                allowedSchemes: ["https"],
+                allowLocalhost: false,
+                allowIPAddresses: true,
+                requireTLD: true,
+                performDNSValidation: true,
+                networkTimeout: 3.0
+            )
+        }
+    }
+    
+    /// Validate using a preset configuration
+    /// - Parameters:
+    ///   - urlString: URL string to validate
+    ///   - preset: Predefined configuration preset
+    /// - Returns: Validation result
+    func validate(_ urlString: String, using preset: Configuration) -> ValidationResult {
+        return validate(urlString, configuration: preset)
+    }
+}
+
+// MARK: - String Extension
+
+public extension String {
+    
+    /// Validate this string as a URL
+    /// - Parameter validator: URLValidator instance (default: shared)
+    /// - Returns: ValidationResult
+    func validateAsURL(using validator: URLValidator = .shared) -> URLValidator.ValidationResult {
+        return validator.validate(self)
+    }
+    
+    /// Check if this string is a valid URL
+    /// - Parameter validator: URLValidator instance (default: shared)
+    /// - Returns: Boolean indicating validity
+    var isValidURL: Bool {
+        return URLValidator.shared.isValid(self)
+    }
+    
+    /// Sanitize this string as a URL
+    /// - Parameter validator: URLValidator instance (default: shared)
+    /// - Returns: Sanitized URL string or nil
+    func sanitizedAsURL(using validator: URLValidator = .shared) -> String? {
+        return validator.sanitize(self)
+    }
+}
+
+
+extension URL {
+    var urlBase: String? {
+        // Return the host component, which gives us the base domain (e.g., "github.com")
+        return host
+    }
+}

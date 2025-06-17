@@ -81,6 +81,8 @@ struct SettingsView: View {
                         .padding(.vertical, 12)
                     
                     
+                    SiteHeaderOption(siteName: viewModel.currentTab?.url?.urlBase ?? "Unknown Site")
+                    
                     // Privacy & Security Section
                     SettingsSection(title: "Privacy & Security") {
                         SettingsRow(
@@ -142,6 +144,29 @@ struct SettingsView: View {
     }
 }
 
+struct SiteHeaderOption: View {
+    var siteName: String
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SITE SETTINGS")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1)
+                
+                Text(siteName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.05))
+    }
+}
 struct SettingsSection<Content: View>: View {
     let title: String
     let content: Content

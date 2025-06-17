@@ -17,6 +17,8 @@ class TabEntity {
     var urlString: String?
     var favicon: Data?
     
+    //broswer view state
+    var zoomLevel: CGFloat = 1.0 
     // Navigation State
     var isLoading: Bool
     var canGoBack: Bool

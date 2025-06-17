@@ -8,7 +8,7 @@
 import SwiftUI
 
 // MARK: -  Tab Row
-// Updated TabRow with beautified mute button
+
 struct TabRow: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
@@ -26,12 +26,14 @@ struct TabRow: View {
             // Favicon or default icon
             TabIcon(tab: tab)
             
-            // Title
+            // Title with animation
             VStack(alignment: .leading, spacing: 1) {
                 Text(tab.title)
                     .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                     .foregroundColor(isSelected ? .primary : .secondary)
                     .lineLimit(1)
+                    .animation(.easeInOut(duration: 0.3), value: tab.title)
+                    .transition(.opacity.combined(with: .slide))
                 
                 if let url = tab.url {
                     Text(url.host ?? "")
@@ -233,6 +235,7 @@ struct TabRow: View {
         }
     }
 }
+
 struct TabIcon: View {
     let tab: Tab
     
@@ -242,30 +245,28 @@ struct TabIcon: View {
                 .fill(Color(NSColor.quaternaryLabelColor))
                 .frame(width: 20, height: 20)
             
-            // Use favicon if available, otherwise show default icon
             Group {
-                if tab.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else if let faviconData = tab.favicon,
-                          let nsImage = NSImage(data: faviconData) {
+                if let faviconData = tab.favicon,
+                   let nsImage = NSImage(data: faviconData) {
                     Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 16, height: 16)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                         .shadow(color: Color(NSColor.shadowColor).opacity(0.2), radius: 1, x: 0, y: 0.5)
+                        .onChange(of: tab.favicon) { _ in
+                            print("Favicon updated for tab: \(tab.title)")
+                        }
                 } else {
-                    Image(systemName: "globe")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                    // Just show a soft gray circle, no loading indicator
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
                         .frame(width: 16, height: 16)
                 }
             }
         }
     }
 }
-
 
 
 // MARK: - Tab Context Menu
@@ -303,7 +304,7 @@ struct TabContextMenu: View {
                 viewModel.closeOtherTabs(except: tab)
             }
             
-            Button("Close Tabs to the Right") {
+            Button("Close Tabs below this tab") {
                 viewModel.closeTabsToRight(of: tab)
             }
         }

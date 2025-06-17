@@ -12,7 +12,7 @@ struct BrowserToolbar: View {
                 Button(action: goBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(canGoBack ? .primary : .secondary)
+                        .foregroundColor(canGoBack ? .primary : .gray)
                 }
                 .disabled(!canGoBack)
                 .buttonStyle(ArcNavigationButtonStyle(isEnabled: canGoBack))
@@ -20,7 +20,7 @@ struct BrowserToolbar: View {
                 Button(action: goForward) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(canGoForward ? .primary : .secondary)
+                        .foregroundColor(canGoForward ? .primary : .gray)
                 }
                 .disabled(!canGoForward)
                 .buttonStyle(ArcNavigationButtonStyle(isEnabled: canGoForward))
@@ -37,7 +37,10 @@ struct BrowserToolbar: View {
             AddressBar(
                 text: $viewModel.addressText,
                 isEditing: $viewModel.isEditing,
-                onCommit: viewModel.navigateToURL,
+                onCommit: {
+                    suggestionVM.cancelSuggestions()
+                    viewModel.navigateToURL()
+                },
                 currentURL: viewModel.currentTab?.url,
                 suggestionVM: suggestionVM
             )
@@ -83,7 +86,7 @@ struct BrowserToolbar: View {
                 AddBookmarkSheet(bookmarkViewModel: bookmarkViewModel)
             }
         }
-       
+        
        
     }
     
@@ -111,29 +114,21 @@ struct BrowserToolbar: View {
     
     // MARK: - Actions
     
-    private func goBack() {
-        guard let currentTab = viewModel.currentTab, canGoBack else {
-            print("⚠️ Cannot go back: No tab or navigation history available")
-            return
-        }
-       // currentTab.goBack()
+    func goBack() {
+        print("Attempting to go back. Can go back: \(viewModel.currentTab?.webView?.canGoBack ?? false)")
+        viewModel.currentTab?.webView?.goBack()
     }
 
-    private func goForward() {
-        guard let currentTab = viewModel.currentTab, canGoForward else {
-            print("⚠️ Cannot go forward: No tab or navigation history available")
-            return
-        }
-      //  currentTab.goForward()
+    func goForward() {
+        print("Attempting to go forward. Can go forward: \(viewModel.currentTab?.webView?.canGoForward ?? false)")
+        viewModel.currentTab?.webView?.goForward()
     }
     
     private func refresh() {
         if viewModel.isLoading {
-          
-          //     viewModel.currentTab?.stopLoading()
+            viewModel.stopLoading()
         } else {
-           
-          //     viewModel.currentTab?.reload()
+            viewModel.reload()
         }
     }
     

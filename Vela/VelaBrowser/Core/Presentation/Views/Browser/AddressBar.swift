@@ -50,6 +50,7 @@ struct AddressBar: View {
                           .onSubmit {
                               onCommit()
                               endEditing()
+                              suggestionVM.isShowingSuggestions = false
                           }
                           .onChange(of: text) { _, newValue in
                               suggestionVM.fetchSuggestions(for: newValue)
@@ -108,6 +109,13 @@ struct AddressBar: View {
                   }
               }
           }
+          .onChange(of: currentURL) { oldValue, newValue in
+              if oldValue != newValue{
+                  self.text = newValue?.absoluteString ?? ""
+                  endEditing()
+              }
+          }
+         
           .animation(.easeInOut(duration: 0.2), value: suggestionVM.isShowingSuggestions)
           .popover(isPresented: $showingCertificate) {
               if let certificate = certificateService.certificateInfo {
