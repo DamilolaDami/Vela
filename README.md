@@ -45,7 +45,7 @@ Vela/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/vela.git
+git clone https://github.com/DamilolaDami/Vela.git
 cd vela
 ```
 
@@ -66,15 +66,59 @@ cd vela
 
 ## 🤝 Contributing
 
-We welcome contributions! To assist:
+We’re excited to welcome contributors! Here’s how you can get started:
 
-- Fork the repo and clone your copy.
-- Follow the architectural patterns in `Core` and `Shared`.
-- Write unit or UI tests where appropriate.
-- Submit a PR with a clear description.
+### 👣 Steps to Contribute
+
+1. **Fork** this repository.
+2. **Clone** your fork:
+   ```bash
+   https://github.com/DamilolaDami/Vela.git
+   ```
+3. **Create a new branch** for your feature or fix:
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+4. **Write clear code** following the architecture and style.
+5. **Add tests** (unit or UI) to support your changes.
+6. **Commit** your changes with a meaningful message:
+   ```bash
+   git commit -m "Add: new navigation controller for Spaces"
+   ```
+7. **Push** your changes:
+   ```bash
+   git push origin feature/my-feature
+   ```
+8. **Open a Pull Request** with a description, screenshots (if UI), and linked issues.
+
+### 🧭 Guidelines
+
+- Follow the MVVM and modular structure.
+- Keep PRs focused—small, meaningful changes are easier to review.
+- Write descriptive commit messages.
+- Document your code where clarity is needed.
+- Be kind in code reviews—we’re building something great together.
 
 ---
 
 ## 📜 License
 
-MIT License © 2025 Vela Authors
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+
+### 🔒 Permissions
+
+- ✅ Commercial use
+- ✅ Distribution
+- ✅ Modification
+- ✅ Private use
+
+### ❗ Limitations
+
+- ❌ No liability
+- ❌ No warranty
+
+Please see the LICENSE file for full details.
+
+---
+
+> “Built with intention. Shaped by focus.” — The Vela Team
