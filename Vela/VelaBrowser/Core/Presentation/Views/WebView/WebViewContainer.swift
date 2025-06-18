@@ -21,6 +21,8 @@ struct WebViewContainer: View {
                 )
                 .id(currentTab.id)
                 
+            }else{
+                Text("no webview")
             }
         }
         .overlay(alignment: .topTrailing, content: {
