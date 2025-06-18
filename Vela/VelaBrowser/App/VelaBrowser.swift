@@ -18,10 +18,11 @@ struct VelaApp: App {
         WindowGroup {
             createMainView()
                 .withNotificationBanners()
-                .frame(minWidth: 1200, minHeight: 700)
+                .frame(minWidth: 1360, minHeight: 700)
                 .environment(\.appDependencies, appDependencies)
                 .onAppear(perform: configureAppDelegate)
                 .environmentObject(quitManager)
+            
                 .onAppear {
                     // Connect the app delegate to our quit manager
                     appDelegate.quitHandler = {
@@ -34,7 +35,10 @@ struct VelaApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
         .windowToolbarStyle(.unified(showsTitle: false))
+        .windowLevel(.normal)
+        .windowResizability(.automatic)
         .modelContainer(appDependencies.persistenceController.container)
         .commands {
             createCommands()

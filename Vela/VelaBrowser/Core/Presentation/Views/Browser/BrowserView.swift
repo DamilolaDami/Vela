@@ -14,6 +14,7 @@ struct BrowserView: View {
     @StateObject private var suggestionViewModel: SuggestionViewModel
     @StateObject private var velaPilotViewModel: VelaPilotViewModel
     @StateObject private var noteBoardVM: NoteBoardViewModel
+    @StateObject var manager = DefaultBrowserManager()
     @EnvironmentObject private var quitManager: QuitManager
     init(viewModel: BrowserViewModel, bookMarkViewModel: BookmarkViewModel, suggestionViewModel: SuggestionViewModel, velaPilotViewModel: VelaPilotViewModel, noteBoardVM: NoteBoardViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -29,8 +30,8 @@ struct BrowserView: View {
                 NavigationSplitView(columnVisibility: $viewModel.columnVisibility) {
                     // Sidebar
                     SidebarView(viewModel: viewModel, previewManager: previewManager, boardVM: viewModel.noteboardVM)
-                        .frame(minWidth: 280, maxWidth: 320)
-                        .navigationSplitViewColumnWidth(280)
+                        .frame(minWidth: 245, maxWidth: 320)
+                        .navigationSplitViewColumnWidth(245)
                 } detail: {
                     // Main Content
                     VStack(spacing: 0) {
@@ -60,17 +61,14 @@ struct BrowserView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    
-                    
-                                    .toolbar(content: {
-                                        ToolbarItem(placement: .principal) {
-                                            if let currentTab = viewModel.currentTab {
-                                                if currentTab.isLoading && !viewModel.isInBoardMode{
-                                                    VelaProgressIndicator(progress: viewModel.estimatedProgress)
-                                                }
-                                            }
-                                        }
-                                    })
+                    .overlay(alignment: .top, content: {
+                        if let currentTab = viewModel.currentTab {
+                            if currentTab.isLoading && !viewModel.isInBoardMode{
+                                
+                                VelaProgressIndicator(progress: viewModel.estimatedProgress)
+                            }
+                        }
+                    })
                     // Background overlay for dismissing suggestions
                     .background {
                         if suggestionViewModel.isShowingSuggestions && !suggestionViewModel.suggestions.isEmpty && !viewModel.isInBoardMode {
@@ -106,6 +104,7 @@ struct BrowserView: View {
             .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
             .browserKeyboardShortcuts(viewModel: viewModel)
             .focusable()
+           
             .overlay(
                 TabPreviewOverlay(previewManager: previewManager)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,6 +118,11 @@ struct BrowserView: View {
             }
             .sheet(isPresented: $quitManager.showingQuitDialog) {
                 QuitDialog()
+            }
+            .overlay(alignment: .bottomTrailing) {
+                DefaultBrowserPromptView(manager: manager)
+                    .padding()
+                  
             }
             
            

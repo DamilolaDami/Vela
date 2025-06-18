@@ -12,7 +12,7 @@ import SwiftUI
 struct TabRow: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
-    let tab: Tab
+    @ObservedObject var tab: Tab
     let isSelected: Bool
     let isHovered: Bool
     let onSelect: () -> Void
@@ -25,6 +25,7 @@ struct TabRow: View {
         HStack(spacing: 8) {
             // Favicon or default icon
             TabIcon(tab: tab)
+            .id(tab.favicon?.hashValue ?? 0)
             
             // Title with animation
             VStack(alignment: .leading, spacing: 1) {
@@ -254,7 +255,7 @@ struct TabIcon: View {
                         .frame(width: 16, height: 16)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                         .shadow(color: Color(NSColor.shadowColor).opacity(0.2), radius: 1, x: 0, y: 0.5)
-                        .onChange(of: tab.favicon) { _ in
+                        .onChange(of: tab.favicon) {_, _ in
                             print("Favicon updated for tab: \(tab.title)")
                         }
                 } else {

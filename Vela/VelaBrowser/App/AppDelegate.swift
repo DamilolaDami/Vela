@@ -11,18 +11,29 @@ import SwiftUI
 class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var browserViewModel: BrowserViewModel?
     var bookmarkViewModel: BookmarkViewModel?
+    private var settingsWindowController: NSWindowController?
     private var keyEventMonitor: Any?
     var quitHandler: (() -> Void)?
     private var shouldQuit = false
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupAppearance()
-       // hideTitleBar()
+       hideTitleBar()
         if let window = NSApplication.shared.windows.first {
             window.delegate = self // Set delegate for full-screen events
             // Removed styleMask.insert(.fullScreen) to avoid exception
             window.collectionBehavior.insert(.fullScreenPrimary) // Allow full-screen mode
         }
+    }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            // Handle URL inside Vela's browser UI
+            browserViewModel?.createNewTab(with: url, shouldReloadTabs: false, focusAddressBar: false)
+        }
+    }
+ 
+    func hideTitleBar() {
+     
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -129,7 +140,51 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         print("Menu action: Toggle Sidebar")
         browserViewModel?.toggleSidebar()
     }
-    
+    @MainActor @objc func openSettingsWindow(_ sender: Any?) {
+           // Method 1: Using NSWindow with SwiftUI content
+           openSettingsWindowMethod()
+           
+       }
+       
+       // Method 1: Create NSWindow with SwiftUI content (Most flexible)
+       @MainActor private func openSettingsWindowMethod() {
+           // Check if settings window already exists
+           if let existingController = settingsWindowController {
+               existingController.window?.makeKeyAndOrderFront(nil)
+               return
+           }
+           
+           // Create the SwiftUI view
+           let settingsView = VelaSettingsView()
+           
+           // Create the hosting view controller
+           let hostingController = NSHostingController(rootView: settingsView)
+           
+           // Create the window
+           let window = NSWindow(
+               contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+               styleMask: [.titled, .closable, .resizable],
+               backing: .buffered,
+               defer: false
+           )
+           
+           // Configure window
+           window.title = "Settings"
+           window.contentViewController = hostingController
+           window.center()
+           window.setFrameAutosaveName("SettingsWindow")
+           
+           // Create window controller
+           let windowController = NSWindowController(window: window)
+           self.settingsWindowController = windowController
+           
+           // Handle window closing
+           window.delegate = self
+           
+           // Show the window
+           windowController.showWindow(nil)
+           window.makeKeyAndOrderFront(nil)
+       }
     // MARK: - Bookmark Actions
     @MainActor @objc func addBookmark(_ sender: Any?) {
         print("Menu action: Add Bookmark")
@@ -181,7 +236,10 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let bookmarkViewModel = self.bookmarkViewModel else { return }
         browserViewModel?.openBookmarkForSelected(bookmarkViewModel: bookmarkViewModel)
     }
-    
+    @MainActor @objc func openHelpPage(url: URL) {
+       
+    }
+
     // MARK: - Helper Methods for File Dialogs
     private func showImportBookmarksDialog() {
         let panel = NSOpenPanel()

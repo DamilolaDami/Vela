@@ -89,6 +89,13 @@ struct VelaCommands: Commands {
         }
         
         // View Menu
+        CommandGroup(after: .appInfo) {
+            Button("Settings...") {
+                appDelegate.openSettingsWindow(nil)
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+
+        }
         CommandGroup(replacing: .appSettings) {
             Button("Toggle Sidebar") {
                 appDelegate.toggleSidebar(nil)
@@ -171,8 +178,8 @@ struct VelaCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
             }
         }
-        CommandMenu("VelaPilot") {
-            Button((appDelegate.browserViewModel?.showCommandPalette ?? false) ? "Hide Vela Pilot" : "Show Vela Pilot") {
+        CommandMenu("Pilot") {
+            Button((appDelegate.browserViewModel?.showCommandPalette ?? false) ? "Hide Pilot" : "Show Pilot") {
                 appDelegate.browserViewModel?.showCommandPalette.toggle()
             }
             .keyboardShortcut("k", modifiers: .command)
@@ -364,6 +371,43 @@ struct VelaCommands: Commands {
                 // TODO: Implement show all spaces
             }
             .keyboardShortcut("s", modifiers: [.command, .control])
+        }
+        CommandGroup(replacing: .help) {
+            // Onboarding & Docs
+            Button("🧭 Getting Started Guide") {
+                appDelegate.openHelpPage(url: URL(string: "https://vela.app/docs/getting-started")!)
+            }
+            Button("📘 Vela User Manual") {
+                appDelegate.openHelpPage(url: URL(string: "https://vela.app/docs")!)
+            }
+            Button("⌨️ Keyboard Shortcuts") {
+                appDelegate.openHelpPage(url: URL(string: "https://vela.app/docs/shortcuts")!)
+            }
+            
+            Divider()
+            
+            // Learning & Updates
+            Button("🎥 Watch Video Tutorials") {
+                appDelegate.openHelpPage(url: URL(string: "https://youtube.com/playlist?list=VELATUTS")!)
+            }
+            Button("🆕 What's New in Vela") {
+                appDelegate.openHelpPage(url: URL(string: "https://vela.app/releases")!)
+            }
+
+            Divider()
+            
+            // Feedback & Support
+            Button("📩 Contact Support") {
+                appDelegate.openHelpPage(url: URL(string: "mailto:support@vela.app?subject=Support%20Request")!)
+            }
+            Button("🐞 Report a Bug") {
+                appDelegate.openHelpPage(url: URL(string: "https://vela.app/feedback/bug-report")!)
+            }
+            Button("💡 Suggest a Feature") {
+                appDelegate.openHelpPage(url: URL(string: "https://vela.app/feedback/feature-request")!)
+            }
+            
+          
         }
     }
 }

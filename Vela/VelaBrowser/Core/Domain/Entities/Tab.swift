@@ -76,61 +76,278 @@ class Tab: Identifiable, Equatable, ObservableObject {
     
     private func setupFaviconObserver() {
         $url
+            .compactMap { $0 } // Filter out nil URLs
             .sink { [weak self] url in
-                guard let self = self, let url = url else { return }
+                guard let self = self else { return }
+                print("🔍 URL changed, triggering favicon load for: \(url.absoluteString)")
                 self.loadFavicon(for: url)
             }
             .store(in: &cancellables)
     }
     
-    private func loadFavicon(for url: URL) {
-        guard let webView = webView, !webView.isLoading else {
-            // Retry after a delay if the page is still loading
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.loadFavicon(for: url)
+    private var faviconLoadQueue: [(URL, Int)] = [] // (URL, retryCount)
+    private let maxFaviconRetries = 3
+    private var currentFaviconTask: AnyCancellable?
+    private var isLoadingFavicon = false
+
+    func loadFavicon(for url: URL) {
+        // Prevent multiple simultaneous favicon loads
+        guard !isLoadingFavicon else {
+            return
+        }
+        
+        guard let webView = webView else {
+            if faviconLoadQueue.first(where: { $0.0 == url }) == nil && faviconLoadQueue.count < 10 {
+                faviconLoadQueue.append((url, 0))
+                print("📋 Queued favicon load for: \(url)")
+                checkFaviconQueue()
             }
             return
         }
         
-        // Reset favicon
+        guard !webView.isLoading else {
+            if faviconLoadQueue.first(where: { $0.0 == url }) == nil && faviconLoadQueue.count < 10 {
+                faviconLoadQueue.append((url, 0))
+                checkFaviconQueue()
+            }
+            return
+        }
+        
+        isLoadingFavicon = true
+        
+        // Cancel any existing favicon task
+        currentFaviconTask?.cancel()
+        
+        // Reset favicon to trigger UI update
         self.favicon = nil
         
         let faviconJS = """
         (function() {
-            let link = document.querySelector('link[rel~="icon"]');
-            return link ? link.href : null;
+            let link = document.querySelector('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"], link[rel="apple-touch-icon-precomposed"]');
+            if (link && link.href) {
+                return link.href;
+            }
+            let meta = document.querySelector('meta[itemprop="image"]');
+            if (meta && meta.content) {
+                return meta.content;
+            }
+            return null;
         })();
         """
         
         webView.evaluateJavaScript(faviconJS) { [weak self] (result, error) in
             guard let self = self else { return }
-            if let faviconURLString = result as? String, let faviconURL = URL(string: faviconURLString) {
-                self.fetchFavicon(from: faviconURL)
-            } else {
-                let faviconURL = url.deletingLastPathComponent().appendingPathComponent("favicon.ico")
-                self.fetchFavicon(from: faviconURL)
+            
+            if let error = error {
+                print("❌ Failed to evaluate favicon JavaScript: \(error)")
+                self.isLoadingFavicon = false
+                return
             }
+            
+            var faviconURLs: [URL] = []
+            
+            // Try JavaScript-discovered favicon first
+            if let faviconURLString = result as? String,
+               let jsURL = URL(string: faviconURLString, relativeTo: url) {
+                faviconURLs.append(jsURL)
+            }
+            
+            // Add common favicon paths as fallbacks
+            let commonPaths = [
+                "/favicon.ico",
+                "/apple-touch-icon.png",
+                "/favicon.png",
+                "/favicon.jpg",
+                "/favicon.svg"
+            ]
+            
+            for path in commonPaths {
+                // Fix URL construction to avoid malformed URLs
+                if let baseURL = URL(string: url.scheme! + "://" + url.host!) {
+                    let faviconURL = baseURL.appendingPathComponent(path)
+                    if !faviconURLs.contains(faviconURL) {
+                        faviconURLs.append(faviconURL)
+                    }
+                }
+            }
+            
+            if faviconURLs.isEmpty {
+                self.isLoadingFavicon = false
+                return
+            }
+            
+            self.tryFaviconURLs(faviconURLs, originalURL: url)
         }
     }
-    
-    private func fetchFavicon(from url: URL) {
-        URLSession.shared.dataTaskPublisher(for: url)
+
+    private func tryFaviconURLs(_ urls: [URL], originalURL: URL, index: Int = 0) {
+        guard index < urls.count else {
+            isLoadingFavicon = false
+            return
+        }
+        
+        let faviconURL = urls[index]
+        
+        // Create a proper URL with cache-busting parameter
+        guard var components = URLComponents(url: faviconURL, resolvingAgainstBaseURL: true) else {
+            print("❌ Invalid favicon URL: \(faviconURL)")
+            tryFaviconURLs(urls, originalURL: originalURL, index: index + 1)
+            return
+        }
+        
+        components.queryItems = [URLQueryItem(name: "t", value: "\(Date().timeIntervalSince1970)")]
+        
+        guard let finalURL = components.url else {
+            print("❌ Failed to construct favicon URL")
+            tryFaviconURLs(urls, originalURL: originalURL, index: index + 1)
+            return
+        }
+        
+        // Create request with timeout
+        var request = URLRequest(url: finalURL)
+        request.timeoutInterval = 10.0
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        
+        currentFaviconTask = URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { output in
+                // Validate response
+                guard let httpResponse = output.response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+                
+                guard httpResponse.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                
                 guard !output.data.isEmpty else {
+                    throw URLError(.zeroByteResource)
+                }
+                
+                // Basic image validation
+                let data = output.data
+                guard data.count > 16 else {
+                    throw URLError(.badServerResponse)
+                }
+                
+                // Check for common image signatures
+                let header = data.prefix(16)
+                let isValidImage = header.starts(with: [0x89, 0x50, 0x4E, 0x47]) || // PNG
+                                  header.starts(with: [0xFF, 0xD8, 0xFF]) || // JPEG
+                                  header.starts(with: [0x47, 0x49, 0x46]) || // GIF
+                                  header.starts(with: [0x3C, 0x73, 0x76, 0x67]) || // SVG (starts with <svg)
+                                  header.starts(with: [0x00, 0x00, 0x01, 0x00]) // ICO
+                
+                guard isValidImage else {
+                    throw URLError(.badServerResponse)
+                }
+                
+                return data
+            }
+            .timeout(10.0, scheduler: DispatchQueue.global())
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                guard let self = self else { return }
+                
+                switch completion {
+                case .failure(let error):
+                    // Try next URL
+                    self.tryFaviconURLs(urls, originalURL: originalURL, index: index + 1)
+                case .finished:
+                    break
+                }
+            } receiveValue: { [weak self] data in
+                guard let self = self else { return }
+                
+                self.favicon = data
+                self.isLoadingFavicon = false
+                
+                // Clear the task reference
+                self.currentFaviconTask = nil
+            }
+    }
+
+    // Remove the old tryAlternativeFaviconPaths method since it's now integrated above
+
+    private func checkFaviconQueue() {
+        guard !faviconLoadQueue.isEmpty else { return }
+        guard !isLoadingFavicon else {
+            // Wait for current favicon load to complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.checkFaviconQueue()
+            }
+            return
+        }
+        
+        guard webView != nil else {
+            faviconLoadQueue.removeAll()
+            return
+        }
+        
+        let (url, retryCount) = faviconLoadQueue.removeFirst()
+        
+        if retryCount >= maxFaviconRetries {
+            print("❌ Max retries reached for favicon load: \(url)")
+            checkFaviconQueue() // Process next item
+            return
+        }
+        
+        guard !webView!.isLoading else {
+            faviconLoadQueue.append((url, retryCount + 1))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.checkFaviconQueue()
+            }
+            return
+        }
+        loadFavicon(for: url)
+    }
+
+    private func fetchFavicon(from url: URL) {
+        // Add cache-busting query parameter to avoid stale favicons
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+            print("❌ Invalid favicon URL: \(url)")
+            return
+        }
+        components.queryItems = [URLQueryItem(name: "t", value: "\(Date().timeIntervalSince1970)")]
+
+        guard let finalURL = components.url else {
+            print("❌ Failed to construct favicon URL")
+            return
+        }
+
+        URLSession.shared.dataTaskPublisher(for: finalURL)
+            .tryMap { output in
+                guard !output.data.isEmpty, output.response.mimeType?.contains("image") == true else {
                     throw URLError(.badServerResponse)
                 }
                 return output.data
             }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
-                if case .failure = completion {
-                    // Try an alternative favicon URL or keep the current favicon
-                    print("Failed to fetch favicon from \(url)")
+                if case .failure(let error) = completion {
+                    print("❌ Failed to fetch favicon from \(finalURL): \(error)")
+                    // Try alternative favicon paths as a fallback
+                    self?.tryAlternativeFaviconPaths(for: url)
                 }
             } receiveValue: { [weak self] data in
                 self?.favicon = data
+              
             }
             .store(in: &cancellables)
+    }
+
+    private func tryAlternativeFaviconPaths(for url: URL) {
+        // Try common alternative favicon paths
+        let alternativePaths = [
+            "/apple-touch-icon.png",
+            "/favicon.png",
+            "/favicon.jpg",
+            "/favicon.svg"
+        ]
+
+        for path in alternativePaths {
+            let alternativeURL = url.deletingLastPathComponent().appendingPathComponent(path)
+            fetchFavicon(from: alternativeURL)
+        }
     }
     
     static func == (lhs: Tab, rhs: Tab) -> Bool {
@@ -626,11 +843,21 @@ class Tab: Identifiable, Equatable, ObservableObject {
         }
     }
     
+    @objc func loadFaviconDelayed(_ url: URL) {
+        loadFavicon(for: url)
+    }
+    
     // MARK: - Cleanup
     private func cleanupWebView(_ webView: WKWebView) {
+        // Cancel any ongoing favicon task
+        currentFaviconTask?.cancel()
+        currentFaviconTask = nil
+        isLoadingFavicon = false
+        
         webViewObservers.forEach { $0.invalidate() }
         webViewObservers.removeAll()
-        
+        faviconLoadQueue.removeAll()
+        cancellables.removeAll()
         mediaPlaybackObserver?.invalidate()
         hasMediaObserver?.invalidate()
         mediaPlaybackObserver = nil
@@ -658,6 +885,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
         navigationDelegate = nil
         stopAudioCheckTimer()
     }
+
     
     func setZoomLevel(_ newZoomLevel: CGFloat) {
             let clampedZoom = max(minZoomLevel, min(newZoomLevel, maxZoomLevel))

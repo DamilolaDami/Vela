@@ -16,7 +16,9 @@ struct QuickAccessGrid: View {
         QuickAccessItem(id: "figma", title: "Figma", iconURL: "https://www.google.com/s2/favicons?domain=figma.com&sz=64", color: Color(NSColor.labelColor), url: "https://figma.com"),
         QuickAccessItem(id: "spotify", title: "Spotify", iconURL: "https://www.google.com/s2/favicons?domain=open.spotify.com&sz=64", color: Color(NSColor.labelColor), url: "https://spotify.com"),
         QuickAccessItem(id: "notion", title: "Notion", iconURL: "https://www.google.com/s2/favicons?domain=notion.so&sz=64", color: Color(NSColor.labelColor), url: "https://notion.so"),
-        QuickAccessItem(id: "twitter", title: "Twitter", iconURL: "https://www.google.com/s2/favicons?domain=twitter.com&sz=64", color: Color(NSColor.labelColor), url: "https://twitter.com")
+        QuickAccessItem(id: "twitter", title: "Twitter", iconURL: "https://www.google.com/s2/favicons?domain=twitter.com&sz=64", color: Color(NSColor.labelColor), url: "https://twitter.com"),
+        QuickAccessItem(id: "chatgpt", title: "ChatGPT", iconURL: "https://www.google.com/s2/favicons?domain=chat.openai.com&sz=64", color: Color(NSColor.labelColor), url: "https://chat.openai.com"),
+        QuickAccessItem(id: "gmail", title: "Gmail", iconURL: "https://ssl.gstatic.com/ui/v1/icons/mail/images/favicon2.ico", color: Color(NSColor.labelColor), url: "https://mail.google.com/mail/")
     ]
     
     var body: some View {
@@ -32,7 +34,7 @@ struct QuickAccessGrid: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 12) {
                 ForEach(Self.quickAccessItems, id: \.id) { item in
                     QuickAccessButton(item: item) {
-                        viewModel.openURL(item.url)
+                        viewModel.openQuickAccessURL(item.url)
                     }
                 }
             }
@@ -85,7 +87,7 @@ struct QuickAccessButton: View {
                             Color(NSColor.controlAccentColor).opacity(0.15) :
                             item.color.opacity(0.1)
                         )
-                        .frame(width: 55, height: 55)
+                        .frame(width: 50, height: 50)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
                                 .stroke(

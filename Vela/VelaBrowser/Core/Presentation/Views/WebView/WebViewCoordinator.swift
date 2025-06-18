@@ -91,63 +91,83 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         }
     }
 
-    // MARK: - KVO (unchanged)
+    // MARK: - KVO 
+    private func setupObservers() {
+        guard let webView = webView else { return }
+        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.isLoading), options: [.new], context: nil)
+        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.estimatedProgress), options: [.new], context: nil)
+        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.title), options: [.new], context: nil)
+        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.url), options: [.new], context: nil)
+        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.magnification), options: [.new], context: nil)
+    }
+
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
         guard let webView = object as? WKWebView,
               webView == self.webView,
               let parent = self.parent,
               parent.tab.id == self.tabId else { return }
-
+        
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
                   let parent = self.parent,
                   parent.tab.id == self.tabId else { return }
-
+            
             let tab = parent.tab
             var tabUpdated = false
             
             switch keyPath {
             case #keyPath(WKWebView.isLoading):
-                let loading = webView.isLoading
-                tab.isLoading = loading
-                parent.isLoading = loading
+                tab.isLoading = webView.isLoading
+                parent.isLoading = webView.isLoading
                 tabUpdated = true
+                
             case #keyPath(WKWebView.estimatedProgress):
                 parent.estimatedProgress = webView.estimatedProgress
+                
             case #keyPath(WKWebView.title):
                 if let newTitle = webView.title, !newTitle.isEmpty, tab.title != newTitle {
                     tab.title = newTitle
                     tabUpdated = true
-                    
                 } else if webView.title?.isEmpty == true || webView.title == nil {
                     tab.title = "Untitled"
                     tabUpdated = true
                 }
-            case #keyPath(WKWebView.magnification):
-                            if let newMagnification = change?[.newKey] as? CGFloat,
-                               newMagnification != self.lastMagnification {
-                                self.lastMagnification = newMagnification
-                                tab.zoomLevel = newMagnification
-                                tab.startZoomIndicator()
-                                tabUpdated = true
-                            }
                 
             case #keyPath(WKWebView.url):
                 if let newURL = webView.url, tab.url != newURL {
+                    print("🔗 WebView URL changed to: \(newURL.absoluteString)")
                     tab.url = newURL
                     self.lastRequestedURL = newURL
                     tabUpdated = true
+                    // Schedule favicon loading with a small delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        tab.loadFavicon(for: newURL)
+                    }
+
                 }
+                
+            case #keyPath(WKWebView.magnification):
+                if let newMagnification = change?[.newKey] as? CGFloat,
+                   newMagnification != self.lastMagnification {
+                    self.lastMagnification = newMagnification
+                    tab.zoomLevel = newMagnification
+                    tab.startZoomIndicator()
+                    tabUpdated = true
+                }
+                
             default:
                 break
             }
+            
             if let audioWebView = webView as? AudioObservingWebView {
                 let isAudioPlaying = audioWebView.isPlayingAudioPrivate
                 if tab.isPlayingAudio != isAudioPlaying {
                     tab.isPlayingAudio = isAudioPlaying
                     print("🎧 Audio state updated via _isPlayingAudio: \(isAudioPlaying)")
+                    tabUpdated = true
                 }
             }
+            
             parent.suggestionViewModel.cancelSuggestions()
             if tabUpdated {
                 self.browserViewModel?.updateTab(tab)
@@ -182,7 +202,9 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         if pendingNavigation == navigation {
             pendingNavigation = nil
         }
-        
+        let newURL = webView.url
+        let oldHost = parent.tab.url?.host
+        let newHost = newURL?.host
         // Inject JavaScript to ensure full-screen API is available
         _ = """
         (function() {
@@ -242,7 +264,9 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             parent.isLoading = false
             parent.estimatedProgress = 1.0
             parent.suggestionViewModel.cancelSuggestions()
-            parent.tab.reloadFavicon()
+            if oldHost != newHost || parent.tab.favicon == nil {
+                parent.tab.reloadFavicon()
+            }
         }
     }
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {

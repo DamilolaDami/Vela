@@ -49,10 +49,6 @@ struct TabsSection: View {
             VStack(spacing: 0) {
                 HStack {
                     HStack(spacing: 8) {
-                        Circle()
-                            .fill(currentSpaceColor)
-                            .frame(width: 8, height: 8)
-                        
                         Text("\(viewModel.currentSpace?.name ?? "Personal Space")")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.primary)
@@ -107,7 +103,6 @@ struct TabsSection: View {
                     .fixedSize() // Prevent compression of the right side elements
                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isSpaceHeaderHovered)
                 }
-                .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .onHover { hovering in
                     isSpaceHeaderHovered = hovering

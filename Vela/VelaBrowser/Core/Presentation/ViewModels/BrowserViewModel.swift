@@ -295,32 +295,45 @@ class BrowserViewModel: ObservableObject {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         configuration.preferences.isFraudulentWebsiteWarningEnabled = false
         configuration.applicationNameForUserAgent = "Safari/605.1.15"
-        
+
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        
-        if tab.webView == nil {
-            tab.webView = webView
-        }
-        
+
+        // Set up the webView fully before any operations
+        tab.setWebView(webView)
+
+        // Load URL and favicon after webView is set
         if let url = tab.url {
-            tab.webView?.load(URLRequest(url: url))
+            webView.load(URLRequest(url: url))
+            // Delay favicon loading until webView is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                tab.reloadFavicon()
+            }
         }
-        
+
+        // Subscribe to favicon changes to update the tab in the repository
+        tab.$favicon
+            .dropFirst() // Ignore initial nil value
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                self.updateTab(tab)
+            }
+            .store(in: &cancellables)
+
         // Insert new tab at the beginning of the tabs array if not in background
         if inBackground {
             tabs.append(tab)
         } else {
             tabs.insert(tab, at: 0)
         }
-        
+
         // Update currentSpace.tabs
         if let space = currentSpace {
             let updatedSpace = space
             updatedSpace.tabs = tabs
             updateSpace(updatedSpace)
         }
-        
+
         if inBackground {
             if let previous = previousTab {
                 currentTab = previous
@@ -615,11 +628,102 @@ class BrowserViewModel: ObservableObject {
         if let currentTab = currentTab {
             currentTab.url = url
         } else {
-            createNewTab()
+            createNewTab(with: url, inBackground: false, shouldReloadTabs: false, focusAddressBar: false)
             currentTab?.url = url
         }
     }
-    
+    func openQuickAccessURL(_ urlString: String) {
+        print("openQuickAccessURL called with: \(urlString)")
+        
+        guard let url = URL(string: urlString) else {
+            print("Invalid URL: \(urlString)")
+            return
+        }
+        
+        // Normalize input URL for comparison
+        guard let normalizedInputURL = normalizeURL(url) else {
+            print("Failed to normalize input URL")
+            return
+        }
+        print("Normalized input URL: \(normalizedInputURL)")
+        
+        // Check if current tab's URL matches
+        if let currentTab = currentTab,
+           let currentTabURL = currentTab.url,
+           let normalizedCurrentURL = normalizeURL(currentTabURL),
+           normalizedCurrentURL == normalizedInputURL {
+            print("Current tab matches URL: \(currentTab.url?.absoluteString ?? "nil")")
+            return
+        }
+        
+        // Ensure tabs are loaded for current space
+        guard let spaceId = currentSpace?.id else {
+            print("No current space selected, creating new tab")
+            createNewTab(with: url, inBackground: false, shouldReloadTabs: false, focusAddressBar: false)
+            currentTab?.url = url
+            return
+        }
+        
+        print("Current space ID: \(spaceId), tabs count: \(tabs.count)")
+        
+        // Search for existing tab with matching URL
+        for tab in tabs {
+            guard let tabURL = tab.url else {
+                print("Tab \(tab.id) has nil URL")
+                continue
+            }
+            guard let normalizedTabURL = normalizeURL(tabURL) else {
+                print("Failed to normalize tab URL: \(tabURL.absoluteString)")
+                continue
+            }
+            print("Checking tab \(tab.id): URL=\(tabURL.absoluteString), Normalized=\(normalizedTabURL)")
+            if normalizedTabURL == normalizedInputURL {
+                print("Found matching tab: \(tabURL.absoluteString), ID: \(tab.id)")
+                selectTab(tab)
+                return
+            }
+        }
+        
+        print("No matching tab found, creating new tab")
+        
+        // Create a new tab if no match found
+        createNewTab(with: url, inBackground: false, shouldReloadTabs: false, focusAddressBar: false)
+        if let newTab = currentTab {
+            newTab.url = url
+            print("New tab created with URL: \(newTab.url?.absoluteString ?? "nil")")
+        }
+    }
+
+    // Replace the normalizeURL helper method with:
+    private func normalizeURL(_ url: URL) -> String? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        
+        // Remove scheme (http:// or https://)
+        components.scheme = nil
+        
+        // Remove fragments (e.g., #section)
+        components.fragment = nil
+        
+        // Normalize path: remove trailing slashes
+         let path = components.path
+        if path.hasSuffix("/"){
+            components.path = String(path.dropLast())
+        }
+        
+        
+        // Remove leading slashes from the resulting string
+        guard var normalized = components.string else {
+            return nil
+        }
+        
+        while normalized.hasPrefix("/") {
+            normalized = String(normalized.dropFirst())
+        }
+        return normalized.lowercased()
+        // Convert to lowercase for case-insensitive comparison
+    }
     // MARK: - Keyboard Shortcut Handlers
     
     func handleKeyboardShortcut(_ shortcut: KeyboardShortcut) {
