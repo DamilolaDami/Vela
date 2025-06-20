@@ -100,30 +100,25 @@ struct FolderRow: View {
     }
     
     var body: some View {
-        Button(action: onToggle) {
-            VStack(spacing: 0) {
-                // Modern folder header with Arc-like styling
-                HStack(spacing: 8) {
-                    // Expansion indicator
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .frame(width: 12, height: 12)
-//                    
-                    
-                    // Folder icon
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(dropZoneHighlight == folder.id ? .blue : viewModel.currentSpace?.displayColor ?? .secondary)
-                        .frame(width: 20, height: 20)
-                    
-                    // Folder name or text field
-                    if isRenaming {
-                        TextField("", text: $folderName, onCommit: {
-                            commitRename()
-                        })
+        VStack(spacing: 0) {
+            // Modern folder header with Arc-like styling
+            HStack(spacing: 8) {
+                // Expansion indicator
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .frame(width: 12, height: 12)
+
+                // Folder icon
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(dropZoneHighlight == folder.id ? .blue : viewModel.currentSpace?.displayColor ?? .secondary)
+                    .frame(width: 20, height: 20)
+
+                // Folder name or text field
+                if isRenaming {
+                    TextField("Folder name", text: $folderName)
                         .focused($isTextFieldFocused)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.system(size: 13, weight: .medium))
@@ -137,133 +132,134 @@ struct FolderRow: View {
                         .onAppear {
                             isTextFieldFocused = true
                         }
+                        .onSubmit {
+                            commitRename()
+                        }
                         .onKeyPress(.escape) {
                             cancelRename()
                             return .handled
                         }
-                    } else {
-                        Text(folder.name)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.primary)
-                            .lineLimit(1)
-                            .onTapGesture(count: 2) {
-                                startRename()
-                            }
-                    }
-                    
-                    Spacer()
-                    
-                    // Tab count badge
-                    if !folder.tabs.isEmpty {
-                        Text("\(folder.tabs.count)")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule()
-                                    .fill(Color.primary.opacity(0.08))
-                            )
-                    }
-                    
-                    // Action buttons on hover
-                    if isHovered && !isRenaming {
-                        HStack(spacing: 2) {
-                            Button(action: {
-                                startRename()
-                            }) {
-                                Image(systemName: "pencil")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 20, height: 20)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .opacity(0.7)
-                            .onHover { hovering in
-                                // Add subtle hover effect if needed
-                            }
-                            
-                            Button(action: {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    viewModel.deleteFolder(folder)
-                                }
-                            }) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(.red.opacity(0.8))
-                                    .frame(width: 20, height: 20)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .opacity(0.7)
+                } else {
+                    Text(folder.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .onTapGesture(count: 2) {
+                            startRename()
                         }
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                    }
                 }
-                .padding(.horizontal, 5)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(
-                            dropZoneHighlight == folder.id ?
-                            Color.blue.opacity(0.1) :
-                                (isHovered ? Color.primary.opacity(0.04) : Color.clear)
+
+                Spacer()
+
+                // Tab count badge
+                if !folder.tabs.isEmpty {
+                    Text("\(folder.tabs.count)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.primary.opacity(0.08))
                         )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(
-                            dropZoneHighlight == folder.id ?
-                            Color.blue.opacity(0.3) :
-                                Color.clear,
-                            lineWidth: 1
-                        )
-                )
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isHovered = hovering
-                    }
                 }
-                .onDrop(
-                    of: [.text],
-                    delegate: FolderDropDelegate(
-                        folder: folder,
-                        viewModel: viewModel,
-                        dropZoneHighlight: $dropZoneHighlight,
-                        draggedTab: $draggedTab,
-                        isDragging: $isDragging
-                    )
-                )
-                
-                // Folder contents - show active tabs always, others only when expanded
-                LazyVStack(spacing: 1) {
-                    ForEach(folder.tabs.sorted { $0.position < $1.position }, id: \.id) { tab in
-                        let isActiveTab = tab.id == viewModel.currentTab?.id && !viewModel.isInBoardMode
-                        let shouldShowTab = isExpanded || isActiveTab
-                        
-                        if shouldShowTab {
-                            TabRow(
-                                viewModel: viewModel,
-                                previewManager: previewManager,
-                                tab: tab,
-                                isSelected: isActiveTab,
-                                isHovered: hoveredTab == tab.id,
-                                onSelect: { viewModel.selectTab(tab) },
-                                onClose: { viewModel.closeAndDeleteTab(tab) },
-                                onHover: { isHovering in
-                                    hoveredTab = isHovering ? tab.id : nil
-                                }
-                            )
-                            .padding(.leading, 20)
-                            .padding(.trailing, 10)
+
+                // Action buttons on hover
+                if isHovered && !isRenaming {
+                    HStack(spacing: 2) {
+                        Button(action: {
+                            startRename()
+                        }) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 20, height: 20)
                         }
+                        .buttonStyle(PlainButtonStyle())
+                        .opacity(0.7)
+
+                        Button(action: {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                viewModel.deleteFolder(folder)
+                            }
+                        }) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.red.opacity(0.8))
+                                .frame(width: 20, height: 20)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .opacity(0.7)
                     }
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
-                .padding(.top, 4)
-                .padding(.bottom, 8)
             }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        dropZoneHighlight == folder.id ?
+                        Color.blue.opacity(0.1) :
+                            (isHovered ? Color(NSColor.quaternaryLabelColor).opacity(1.0) : Color.clear)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        dropZoneHighlight == folder.id ?
+                        Color.blue.opacity(0.3) :
+                            Color.clear,
+                        lineWidth: 1
+                    )
+            )
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isHovered = hovering
+                }
+            }
+            .onDrop(
+                of: [.text],
+                delegate: FolderDropDelegate(
+                    folder: folder,
+                    viewModel: viewModel,
+                    dropZoneHighlight: $dropZoneHighlight,
+                    draggedTab: $draggedTab,
+                    isDragging: $isDragging
+                )
+            )
             .contentShape(Rectangle())
+            .onTapGesture {
+                onToggle() // Toggle expansion on tap
+            }
+
+            // Folder contents
+            LazyVStack(spacing: 1) {
+                ForEach(folder.tabs.sorted { $0.position < $1.position }, id: \.id) { tab in
+                    let isActiveTab = tab.id == viewModel.currentTab?.id && !viewModel.isInBoardMode
+                    let shouldShowTab = isExpanded || isActiveTab
+                    
+                    if shouldShowTab {
+                        TabRow(
+                            viewModel: viewModel,
+                            previewManager: previewManager,
+                            tab: tab,
+                            isSelected: isActiveTab,
+                            isHovered: hoveredTab == tab.id,
+                            onSelect: { viewModel.selectTab(tab) },
+                            onClose: { viewModel.closeAndDeleteTab(tab) },
+                            onHover: { isHovering in
+                                hoveredTab = isHovering ? tab.id : nil
+                            }
+                        )
+                        .padding(.leading, 20)
+                        .padding(.trailing, 10)
+                    }
+                }
+            }
+            .padding(.top, 4)
+            .padding(.bottom, 8)
         }
-        .buttonStyle(PlainButtonStyle())
     }
     
     private func startRename() {
@@ -278,12 +274,19 @@ struct FolderRow: View {
     }
     
     private func commitRename() {
-        if !folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-           folderName != folder.name {
+        let trimmedName = folderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("Input: \(folderName), Trimmed: \(trimmedName)")
+        
+        if !trimmedName.isEmpty {
             var updatedFolder = folder
-            updatedFolder.name = folderName.trimmingCharacters(in: .whitespacesAndNewlines)
+            updatedFolder.name = folderName
+            print("Saving name: \(folderName)")
             viewModel.updateFolder(updatedFolder)
+        } else {
+            print("Invalid name, reverting to: \(folder.name)")
+            folderName = folder.name
         }
+        
         isRenaming = false
         isTextFieldFocused = false
     }

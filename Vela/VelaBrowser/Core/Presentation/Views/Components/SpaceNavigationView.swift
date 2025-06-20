@@ -336,7 +336,7 @@ extension View {
     }
 }
 
-// MARK: - Updated SpaceChip with Tooltip
+// MARK: - SpaceChip with Tooltip
 struct SpaceChip: View {
     @ObservedObject var viewModel: BrowserViewModel
     let space: Space
@@ -351,7 +351,10 @@ struct SpaceChip: View {
     var body: some View {
         Button(action: {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                viewModel.selectSpace(space)
+                if viewModel.currentSpace?.id != space.id {
+                    viewModel.selectSpace(space)
+                 
+                }
                 viewModel.isShowingSpaceInfoPopover = false
             }
         }) {

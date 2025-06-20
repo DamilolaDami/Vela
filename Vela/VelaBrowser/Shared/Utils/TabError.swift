@@ -286,9 +286,9 @@ class TabErrorHandler: TabErrorHandling, ObservableObject {
         case .securityError:
             return .showErrorPage("Security error - cannot load page")
         case .jsEvaluationError, .audioDetectionError, .faviconLoadError:
-            return shouldRetry(error) ? .retryWithDelay(0.5) : .none
+            return shouldRetry(error) ? .retryWithDelay(0.5) : Optional.none
         case .zoomError:
-            return .none
+            return ErrorRecoveryAction.none
         case .invalidURL:
             return .showErrorPage("Invalid URL")
         case .contentBlockingError:
@@ -301,41 +301,56 @@ class TabErrorHandler: TabErrorHandling, ObservableObject {
         
         print("🔧 Executing recovery action: \(action) for error: \(error.errorDescription ?? "unknown")")
         
-        // Note: These would need to be implemented based on your actual tab management system
+        // Get the tab reference from context if available
+        let tabId = context?["tabId"] as? UUID
+        
         switch action {
         case .reload:
-            // Implement reload logic
-            break
+            // Delegate to the tab or view model to handle reload
+            NotificationCenter.default.post(name: .tabShouldReload, object: tabId)
+            
         case .goBack:
-            // Implement go back logic
-            break
+            NotificationCenter.default.post(name: .tabShouldGoBack, object: tabId)
+            
         case .closeTab:
-            // Implement close tab logic
-            break
+            NotificationCenter.default.post(name: .tabShouldClose, object: tabId)
+            
         case .createNewTab:
-            // Implement create new tab logic
-            break
+            NotificationCenter.default.post(name: .shouldCreateNewTab, object: nil)
+            
         case .resetWebView:
-            // Implement webview reset logic
-            break
+            NotificationCenter.default.post(name: .tabShouldResetWebView, object: tabId)
+            
         case .clearCache:
-            // Implement cache clearing logic
-            break
+            NotificationCenter.default.post(name: .shouldClearCache, object: nil)
+            
         case .retryWithDelay(let delay):
             let errorKey = String(describing: error)
             retryAttempts[errorKey, default: 0] += 1
             
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                // Implement retry logic
                 print("🔄 Retrying after \(delay)s delay")
+                NotificationCenter.default.post(name: .tabShouldRetry, object: tabId)
             }
+            
         case .showErrorPage(let message):
-            // Implement error page display logic
-            print("📄 Showing error page: \(message)")
+            // ⚠️ IMPORTANT: This should set the hasLoadFailed flag
+            if let tabId = tabId {
+                print("📄 Showing error page for tab \(tabId): \(message)")
+                NotificationCenter.default.post(
+                    name: .tabShouldShowErrorPage,
+                    object: tabId,
+                    userInfo: ["errorMessage": message]
+                )
+            } else {
+                print("📄 Showing error page: \(message) (no tabId provided)")
+            }
+            
         case .none:
             break
         }
     }
+
     
     // MARK: - Utility Methods
     
@@ -577,3 +592,15 @@ extension Tab {
     }
 }
 
+
+
+extension Notification.Name {
+    static let tabShouldReload = Notification.Name("tabShouldReload")
+    static let tabShouldGoBack = Notification.Name("tabShouldGoBack")
+    static let tabShouldClose = Notification.Name("tabShouldClose")
+    static let shouldCreateNewTab = Notification.Name("shouldCreateNewTab")
+    static let tabShouldResetWebView = Notification.Name("tabShouldResetWebView")
+    static let shouldClearCache = Notification.Name("shouldClearCache")
+    static let tabShouldRetry = Notification.Name("tabShouldRetry")
+    static let tabShouldShowErrorPage = Notification.Name("tabShouldShowErrorPage")
+}

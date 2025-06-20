@@ -21,11 +21,11 @@ struct BottomActions: View {
                 DownloadsButton(viewModel: viewModel, showDownloads: $showDownloads)
               
              
-               // Spacer()
+                Spacer()
                 // Enhanced Space Navigation
                 SpaceNavigationView(viewModel: viewModel)
                
-              //  Spacer()
+               Spacer()
                 ActionButton(icon: "plus", tooltip: "New Tab or Space",  action: {
                     showNewMenu = true
                 })

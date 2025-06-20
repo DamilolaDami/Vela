@@ -22,7 +22,7 @@ struct NewItemMenu: View {
                                     shortcut: "⌘T",
                                     spaceColor: currentSpace?.displayColor ?? .blue,
                                     action: {
-                                        viewModel.createNewTab()
+                                        viewModel.startCreatingNewTab()
                                         showMenu = false
                                     }
                                 )

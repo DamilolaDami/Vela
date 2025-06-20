@@ -32,6 +32,9 @@ class BrowserViewModel: ObservableObject {
     @Published var previousSpace: Space?
     @Published var isInBoardMode: Bool = false
     @Published var folders: [Folder] = []
+    @Published var tappedTab: Tab?
+    @Published var downloadsManager: DownloadsManager?
+    private var observers: [NSObjectProtocol] = []
      
     private var popupWindows: [WKWebView: NSWindow] = [:]
     
@@ -73,9 +76,11 @@ class BrowserViewModel: ObservableObject {
         self.noteboardVM = noteboardVM
         self.addressBarVM = addressBarVM
         self.detectedSechema = detectedSechema
+        self.downloadsManager = DownloadsManager()
         setupInitialState()
         setupBindings()
         setupFolderBindings()
+        setupErrorNotifications()
     }
     
     private func setupInitialState() {
@@ -271,6 +276,7 @@ class BrowserViewModel: ObservableObject {
     }
     func startCreatingNewTab(){
         self.addressText = ""
+        self.tappedTab = nil
         self.addressBarVM.isShowingEnterAddressPopup = true
     }
     
@@ -376,35 +382,35 @@ class BrowserViewModel: ObservableObject {
     }
     
     func selectTab(_ tab: Tab) {
+        // Stop loading the current tab
         currentTab?.isLoading = false
-        self.addressBarVM.isShowingEnterAddressPopup = false
+        addressBarVM.isShowingEnterAddressPopup = false
+
         // Exit board mode when selecting a tab
         if isInBoardMode {
             exitBoardMode()
         }
-        
+
+        // Ensure the tab has a valid webView
         if tab.webView == nil {
-            let configuration = WKWebViewConfiguration()
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-            configuration.preferences.isFraudulentWebsiteWarningEnabled = false
-            configuration.applicationNameForUserAgent = "Safari/605.1.15"
-            tab.webView = WKWebView(frame: .zero, configuration: configuration)
-            tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-            if let url = tab.url {
-                tab.webView?.load(URLRequest(url: url))
+            configureWebViewForTab(tab)
+        } else if let webView = tab.webView, let url = tab.url, webView.url != url {
+            // Only load the URL if it differs from the current webView URL
+            webView.load(URLRequest(url: url))
+            // Delay favicon loading to ensure webView is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                tab.reloadFavicon()
             }
         }
+
         print("Selecting tab: \(tab.url?.absoluteString ?? "nil")")
-        
         currentTab = tab
+        tappedTab = tab
         addressText = tab.url?.absoluteString ?? ""
-        if currentTab?.url == nil {
-            self.addressBarVM.isShowingEnterAddressPopup = true
+        if tab.url == nil {
+            addressBarVM.isShowingEnterAddressPopup = true
         }
-       
     }
-    
     func selectTabAtIndex(_ index: Int) {
         guard index >= 0 && index < tabs.count else { return }
         selectTab(tabs[index])
@@ -832,34 +838,40 @@ class BrowserViewModel: ObservableObject {
             
             return resultURL
         }
-    func navigateToURL() {
-        
-        guard !addressText.isEmpty else { return }
-
+    
+    func navigateToURL(_ urlString: String?) {
         isLoading = true
+        
+        guard let urlString = urlString, !urlString.isEmpty else {
+            isLoading = false
+            return
+        }
+        
         let urlPattern = "^(https?\\:\\/\\/)?([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(\\/.*)?$"
-        let isURL = addressText.range(of: urlPattern, options: .regularExpression) != nil
-
+        let isURL = urlString.range(of: urlPattern, options: .regularExpression) != nil
+        
         var url: URL?
         if isURL {
-            let urlString = addressText.hasPrefix("http") ? addressText : "https://\(addressText)"
-            url = URL(string: urlString)
+            let finalURLString = urlString.hasPrefix("http") ? urlString : "https://\(urlString)"
+            url = URL(string: finalURLString)
         } else {
-            let query = addressText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? addressText
+            let query = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? urlString
             let searchURLString = "https://www.google.com/search?q=\(query)"
             url = URL(string: searchURLString)
         }
-
+        
         if let url = url {
-            if let tab = currentTab, let webView = tab.webView {
+            if let tab = tappedTab {
+                tab.errorMessage = nil
+                tab.hasLoadFailed = false
                 tab.url = url
-                tab.title = addressText
-                webView.load(URLRequest(url: url))
+                tab.title = urlString
+                tab.webView?.load(URLRequest(url: url))
             } else {
-                createNewTab(with: url)
+                createNewTab(with: url, inBackground: false, shouldReloadTabs: false, focusAddressBar: false, folderId: nil)
             }
         }
-
+        
         isEditing = false
         isLoading = false
     }
@@ -879,6 +891,7 @@ class BrowserViewModel: ObservableObject {
             // **IMPORTANT**: Sort tabs by position when loading from cache
             tabs = cachedTabs.sorted { $0.position < $1.position }
             currentTab = tabs.first
+            tappedTab = tabs.first
             if currentTab?.url == nil {
                 addressBarVM.isShowingEnterAddressPopup = true
             }
@@ -1457,7 +1470,41 @@ class BrowserViewModel: ObservableObject {
                 )
                 .store(in: &cancellables)
         }
-  
+    private func setupErrorNotifications() {
+        let observer1 = NotificationCenter.default.addObserver(
+                   forName: .tabShouldShowErrorPage,
+                   object: nil,
+                   queue: .main
+        ) { [weak self] notification in
+            self?.handleShowErrorPage(notification)
+        }
+        observers.append(observer1)
+        
+        // Handle other notifications similarly...
+    }
+    
+    private func handleShowErrorPage(_ notification: Notification) {
+         guard let tabId = notification.object as? UUID,
+               let tab = tabs.first(where: { $0.id == tabId }) else { return }
+         
+         tab.hasLoadFailed = true
+         tab.isLoading = false
+         
+         if let errorMessage = notification.userInfo?["errorMessage"] as? String {
+             tab.errorMessage = errorMessage
+         }
+     }
+     
+    func removeErrorNotifications(){
+        observers.forEach { observer in
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    deinit {
+        observers.forEach { observer in
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 }
 
 

@@ -93,10 +93,30 @@ class AddressBarViewModel: ObservableObject {
     }
 
     private func generateLocalSuggestions(for query: String) -> [SearchSuggestion] {
+        guard !query.isEmpty else { return [] }
+        
+        var localSuggestions: [SearchSuggestion] = []
+        
+        // Check if query is question-like and add a question and ChatGPT suggestion
+        if query.isQuestionLike {
+            let questionSuggestion = SearchSuggestion(
+                title: query,
+                subtitle: "Ask this question",
+                url: "https://www.google.com/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")",
+                type: .question
+            )
+            let chatGPTSuggestion = SearchSuggestion(
+                title: query,
+                subtitle: "Ask ChatGPT",
+                url: "https://chat.openai.com/?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")",
+                type: .chatGPT
+            )
+            localSuggestions.append(contentsOf: [questionSuggestion, chatGPTSuggestion])
+        }
+        
         // Example: Filter a predefined list of bookmarks or history
         let history = ["SwiftUI tutorial", "iOS development", "Combine framework"]
-        guard !query.isEmpty else { return [] }
-        return history
+        let historyMatches = history
             .filter { $0.lowercased().contains(query.lowercased()) }
             .prefix(5)
             .map { SearchSuggestion(
@@ -105,6 +125,9 @@ class AddressBarViewModel: ObservableObject {
                 url: "https://www.google.com/search?q=\($0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")",
                 type: .history
             ) }
+        
+        localSuggestions.append(contentsOf: historyMatches)
+        return localSuggestions
     }
 
     private func fetchGoogleSuggestions(for query: String, completion: @escaping ([SearchSuggestion]) -> Void) {
@@ -161,7 +184,11 @@ class AddressBarViewModel: ObservableObject {
             .map { response in
                 response.suggestions.enumerated().map { (index, suggestion) in
                     let searchURL = "https://www.google.com/search?q=\(suggestion.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-                    return SearchSuggestion(title: suggestion, subtitle: nil, url: searchURL, type: .search)
+                    
+                    // Determine suggestion type based on content
+                    let suggestionType: SuggestionType = suggestion.isQuestionLike ? .question : .search
+                    
+                    return SearchSuggestion(title: suggestion, subtitle: nil, url: searchURL, type: suggestionType)
                 }
             }
             .replaceError(with: [SearchSuggestion]()) // Explicitly specify type
@@ -191,5 +218,37 @@ class AddressBarViewModel: ObservableObject {
     
     func toggleShowingEnterAddressPopup(_ value: Bool) {
         isShowingEnterAddressPopup = value
+    }
+}
+
+// MARK: - String Extension for Question Detection
+extension String {
+    /// Determines if the query appears to be a question
+    var isQuestionLike: Bool {
+        let trimmed = self.trimmingCharacters(in: .whitespaces).lowercased()
+        
+        // Check for question words at the beginning
+        let questionWords = ["what", "how", "why", "when", "where", "who", "which", "can", "is", "are", "do", "does", "did", "will", "would", "could", "should"]
+        
+        for word in questionWords {
+            if trimmed.hasPrefix(word + " ") {
+                return true
+            }
+        }
+        
+        // Check for question mark
+        if trimmed.hasSuffix("?") {
+            return true
+        }
+        
+        // Check for longer phrases that indicate questions
+        let questionPhrases = ["how to", "what is", "how do", "why does", "where can"]
+        for phrase in questionPhrases {
+            if trimmed.hasPrefix(phrase) {
+                return true
+            }
+        }
+        
+        return false
     }
 }

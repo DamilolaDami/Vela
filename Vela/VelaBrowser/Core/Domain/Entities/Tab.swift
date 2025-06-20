@@ -11,16 +11,19 @@ class Tab: Identifiable, Equatable, ObservableObject {
     @Published var canGoBack: Bool = false
     @Published var canGoForward: Bool = false
     @Published var isPlayingAudio: Bool = false
+    
     var spaceId: UUID?
     let createdAt: Date
     @Published var lastAccessedAt: Date
     @Published var isPinned: Bool = false
     @Published var position: Int = 0
     @Published var folderId: UUID?
-
     @Published var scrollPosition: Double = 0
     @Published var zoomLevel: CGFloat = 1.0 // Default zoom level (100%)
     @Published var isZooming: Bool = false
+    @Published var errorMessage: String?
+    @Published var hasLoadFailed = false
+    @Published var lastLoadError: Error?
     private var zoomIndicatorTimer: Timer?
 
     // Minimum and maximum zoom levels
@@ -38,9 +41,6 @@ class Tab: Identifiable, Equatable, ObservableObject {
     // New properties for enhanced audio detection
     private var mediaPlaybackObserver: NSKeyValueObservation?
     private var hasMediaObserver: NSKeyValueObservation?
-    @Published var hasLoadFailed: Bool = false
-    // Store the last load error for display
-    var lastLoadError: Error? = nil
     
     init(
         id: UUID = UUID(),
@@ -94,7 +94,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
     private var faviconLoadQueue: [(URL, Int)] = [] // (URL, retryCount)
     private let maxFaviconRetries = 3
     private var currentFaviconTask: AnyCancellable?
-     var isLoadingFavicon = false
+    var isLoadingFavicon = false
 
     func loadFavicon(for url: URL) {
         // Prevent multiple simultaneous favicon loads
@@ -169,7 +169,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
             
             for path in commonPaths {
                 // Fix URL construction to avoid malformed URLs
-                if let baseURL = URL(string: url.scheme! + "://" + (url.host ?? "")) {
+                if let baseURL = URL(string: url.scheme! + "://" + url.host!) {
                     let faviconURL = baseURL.appendingPathComponent(path)
                     if !faviconURLs.contains(faviconURL) {
                         faviconURLs.append(faviconURL)
@@ -373,7 +373,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
         }
         
         // Existing setup code...
-        navigationDelegate = TabNavigationDelegate(tab: self, errorHandler: Tab.sharedErrorHandler)
+        navigationDelegate = TabNavigationDelegate(tab: self)
         webView.navigationDelegate = navigationDelegate
         setupAudioMessageHandler(webView)
         setupWebViewObservers()
@@ -974,183 +974,45 @@ class AudioMessageHandler: NSObject, WKScriptMessageHandler {
 // MARK: - Navigation Delegate
 class TabNavigationDelegate: NSObject, WKNavigationDelegate {
     weak var tab: Tab?
-    private let errorHandler: TabErrorHandler
-    private var loadingStartTime: Date?
-    private let loadingTimeout: TimeInterval = 30.0
-    private var timeoutTimer: Timer?
     
-    init(tab: Tab, errorHandler: TabErrorHandler) {
+    init(tab: Tab) {
         self.tab = tab
-        self.errorHandler = errorHandler
         super.init()
     }
     
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        loadingStartTime = Date()
-        
-        // Set timeout timer
-        timeoutTimer?.invalidate()
-        timeoutTimer = Timer.scheduledTimer(withTimeInterval: loadingTimeout, repeats: false) { [weak self] _ in
-            self?.handleLoadingTimeout(webView: webView)
-        }
-        
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, let tab = self.tab else { return }
-            tab.isPlayingAudio = false
-            tab.canGoBack = webView.canGoBack
-            tab.canGoForward = webView.canGoForward
-        }
-    }
-    
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, let tab = self.tab else { return }
-            tab.isPlayingAudio = false
-            tab.canGoBack = webView.canGoBack
-            tab.canGoForward = webView.canGoForward
-        }
-    }
-    
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        timeoutTimer?.invalidate()
-        loadingStartTime = nil
-        
+        print("🔄 Navigation finished for: \(self.tab?.title ?? "unknown")")
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let tab = self.tab else { return }
             tab.canGoBack = webView.canGoBack
             tab.canGoForward = webView.canGoForward
-            
-            // Install audio detection after successful load
+            print("🔄 Tab \(tab.id): canGoBack = \(tab.canGoBack), canGoForward = \(tab.canGoForward)")
+            // Install detection after page fully loads
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 tab.installEnhancedAudioDetection()
             }
         }
     }
     
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        handleNavigationError(navigation: navigation, error: error)
-    }
-    
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        handleNavigationError(navigation: navigation, error: error)
-    }
-    
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        let error = TabError.webProcessCrash(tabId: tab?.id ?? UUID())
-        errorHandler.handleError(error, context: [
-            "webView": webView,
-            "url": webView.url as Any
-        ])
-    }
-    
-    private func handleNavigationError(navigation: WKNavigation?, error: Error) {
-        timeoutTimer?.invalidate()
-        loadingStartTime = nil
-        
-        guard let tab = self.tab else { return }
-        
-        DispatchQueue.main.async {
-            tab.isLoading = false
-        }
-        
-        let nsError = error as NSError
-        if nsError.domain != NSURLErrorDomain || nsError.code != NSURLErrorCancelled {
-            let tabError = TabError.navigationFailed(url: tab.url, error: error)
-            errorHandler.handleError(tabError, context: [
-                "navigation": navigation as Any,
-                "errorDomain": nsError.domain,
-                "errorCode": nsError.code
-            ])
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        print("🔄 Navigation committed")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let tab = self.tab else { return }
+            tab.isPlayingAudio = false
+            tab.canGoBack = webView.canGoBack
+            tab.canGoForward = webView.canGoForward
+            print("🔄 Tab \(tab.id): canGoBack = \(tab.canGoBack), canGoForward = \(tab.canGoForward)")
         }
     }
     
-    private func handleLoadingTimeout(webView: WKWebView) {
-        guard let tab = self.tab else { return }
-        
-        let duration = loadingStartTime?.timeIntervalSinceNow.magnitude ?? 0
-        let error = TabError.loadingTimeout(url: webView.url, duration: duration)
-        
-        errorHandler.handleError(error, context: [
-            "webView": webView,
-            "expectedTimeout": loadingTimeout
-        ])
-        
-        // Stop the loading
-        webView.stopLoading()
-        
-        DispatchQueue.main.async {
-            tab.isLoading = false
-        }
-    }
-    
-    deinit {
-        timeoutTimer?.invalidate()
-    }
-}
-
-
-extension Tab {
-    func loadURLSafely(_ url: URL) async throws {
-        guard let webView = webView else {
-            throw TabError.navigationFailed(url: url, error: NSError(domain: "Tab", code: -1, userInfo: [NSLocalizedDescriptionKey: "No web view available"]))
-        }
-        let request = URLRequest(url: url)
-        do {
-            _ = try await webView.load(request)
-            self.url = url
-            try await loadFaviconWithErrorHandling(for: url)
-        } catch {
-            handleError(TabError.navigationFailed(url: url, error: error), context: ["source": "loadURLSafely"])
-            throw error
-        }
-    }
-    
-    func reloadSafely() throws {
-        guard let webView = webView, let url = url else {
-            throw TabError.navigationFailed(url: nil, error: NSError(domain: "Tab", code: -1, userInfo: [NSLocalizedDescriptionKey: "No web view or URL available"]))
-        }
-        do {
-            webView.reload()
-            try loadFaviconWithErrorHandling(for: url)
-        } catch {
-            handleError(TabError.navigationFailed(url: url, error: error), context: ["source": "reloadSafely"])
-            throw error
-        }
-    }
-    
-    func stopLoadingSafely() throws {
-        guard let webView = webView else {
-            throw TabError.navigationFailed(url: nil, error: NSError(domain: "Tab", code: -1, userInfo: [NSLocalizedDescriptionKey: "No web view available"]))
-        }
-        do {
-            webView.stopLoading()
-        } catch {
-            handleError(TabError.navigationFailed(url: url, error: error), context: ["source": "stopLoadingSafely"])
-            throw error
-        }
-    }
-    
-    func navigateBack() throws {
-        guard let webView = webView, canGoBack else {
-            throw TabError.navigationFailed(url: url, error: NSError(domain: "Tab", code: -1, userInfo: [NSLocalizedDescriptionKey: "Cannot navigate back"]))
-        }
-        do {
-            webView.goBack()
-        } catch {
-            handleError(TabError.navigationFailed(url: url, error: error), context: ["source": "navigateBack"])
-            throw error
-        }
-    }
-    
-    func navigateForward() throws {
-        guard let webView = webView, canGoForward else {
-            throw TabError.navigationFailed(url: url, error: NSError(domain: "Tab", code: -1, userInfo: [NSLocalizedDescriptionKey: "Cannot navigate forward"]))
-        }
-        do {
-            webView.goForward()
-        } catch {
-            handleError(TabError.navigationFailed(url: url, error: error), context: ["source": "navigateForward"])
-            throw error
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        print("🔄 Navigation started")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let tab = self.tab else { return }
+            tab.isPlayingAudio = false
+            tab.canGoBack = webView.canGoBack
+            tab.canGoForward = webView.canGoForward
+            print("🔄 Tab \(tab.id): canGoBack = \(tab.canGoBack), canGoForward = \(tab.canGoForward)")
         }
     }
 }

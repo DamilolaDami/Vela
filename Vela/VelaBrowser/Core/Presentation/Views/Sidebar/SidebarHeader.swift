@@ -171,13 +171,16 @@ struct DownloadsButton: View {
     var body: some View {
         ActionButton(
             icon: "arrow.down.circle.fill",
-            badge: 0,
+            badge: viewModel.activeDownloadsCount,
             tooltip: "Downloads"
         ) {
             showDownloads.toggle()
         }
         .popover(isPresented: $showDownloads, arrowEdge: .bottom) {
-            DownloadsView(viewModel: viewModel)
+            if let downloadsManager = viewModel.downloadsManager {
+                DownloadsView(
+                    viewModel: viewModel, downloadsManager: downloadsManager)
+            }
         }
     }
 }

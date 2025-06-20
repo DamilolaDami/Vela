@@ -18,6 +18,27 @@ struct AddressEntryPopup: View {
     @State private var autocompleteText: String = ""
     @FocusState private var isTextFieldFocused: Bool
     
+    // Dynamic width calculation
+    private var dynamicWidth: CGFloat {
+        let baseWidth: CGFloat = 380
+        let maxWidth: CGFloat = 500
+        let textLength = searchText.count
+        
+        // Start growing after 30 characters, reach max at 80 characters
+        let growthStartLength = 30
+        let growthEndLength = 80
+        
+        if textLength <= growthStartLength {
+            return baseWidth
+        }
+        
+        let growthRange = growthEndLength - growthStartLength
+        let currentGrowth = min(textLength - growthStartLength, growthRange)
+        let growthRatio = CGFloat(currentGrowth) / CGFloat(growthRange)
+        
+        return baseWidth + (maxWidth - baseWidth) * growthRatio
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Search bar with autocomplete
@@ -78,10 +99,11 @@ struct AddressEntryPopup: View {
                 }
             }
         }
-        .frame(width: 380, height: 280)
+        .frame(width: dynamicWidth, height: 280)
         .background(Color(NSColor.windowBackgroundColor))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 8)
+        .animation(.easeInOut(duration: 0.15), value: dynamicWidth) // Smooth width transition
         .onAppear {
             // Auto-fill with current URL if available
             searchText = addressText
@@ -173,7 +195,7 @@ struct AddressEntryPopup: View {
         }
         
         self.addressText = textToSubmit
-        onURLSubmit(textToSubmit)
+        onURLSubmit(textToSubmit) // Add this to trigger navigation
         isPresented = false
         suggestionVM.clearSuggestions()
     }
@@ -184,7 +206,6 @@ struct AddressEntryPopup: View {
         isPresented = false
     }
 }
-
 // MARK: - Custom Autocomplete TextField
 
 struct AutocompleteTextField: NSViewRepresentable {
@@ -415,14 +436,23 @@ struct SuggestionRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: suggestion.type == .url ? "globe" : "magnifyingglass")
-                .font(.system(size: 14))
-                .foregroundColor(isSelected ? .white : .secondary)
-                .frame(width: 20)
+            // Use type-specific icon
+            if suggestion.type != .chatGPT{
+                Image(systemName: suggestion.type.icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(isSelected ? .white : .secondary)
+                    .frame(width: 20)
+            }else{
+                Image("chatgpt-2")
+                    .resizable()
+                    .frame(width: 17, height: 17)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+            }
             
             VStack(alignment: .leading, spacing: 2) {
                 // Use attributed text for title
-                AttributedText(
+                SwiftUIAttributedText(
                     text: suggestion.title,
                     searchQuery: searchQuery,
                     isSelected: isSelected,
@@ -430,9 +460,10 @@ struct SuggestionRow: View {
                     fontWeight: .medium
                 )
                 .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 if let subtitle = suggestion.subtitle {
-                    AttributedText(
+                    SwiftUIAttributedText(
                         text: subtitle,
                         searchQuery: searchQuery,
                         isSelected: isSelected,
@@ -442,8 +473,18 @@ struct SuggestionRow: View {
                     .lineLimit(1)
                 }
             }
-            
             Spacer()
+            // Add ChatGPT indicator with arrow for .chatGPT type
+            if suggestion.type == .chatGPT {
+                HStack(spacing: 4) {
+                 
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
@@ -533,5 +574,63 @@ extension String {
         }
         
         return ranges
+    }
+}
+
+struct SwiftUIAttributedText: View {
+    let text: String
+    let searchQuery: String
+    let isSelected: Bool
+    let fontSize: CGFloat
+    let fontWeight: Font.Weight
+    
+    var body: some View {
+        if searchQuery.isEmpty {
+            // Simple case - no highlighting needed
+            Text(text)
+                .font(.system(size: fontSize, weight: fontWeight))
+                .foregroundColor(textColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else {
+            // Complex case - with search highlighting
+            createHighlightedText()
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+    
+    private var textColor: Color {
+        let baseColor = isSelected ? Color.white : Color.primary
+        let subtitleColor = isSelected ? Color.white.opacity(0.8) : Color.secondary
+        return fontSize == 12 ? subtitleColor : baseColor
+    }
+    
+    @ViewBuilder
+    private func createHighlightedText() -> some View {
+        let searchTerms = searchQuery.lowercased().components(separatedBy: .whitespaces)
+            .filter { !$0.isEmpty }
+        
+        if let firstTerm = searchTerms.first,
+           let range = text.lowercased().range(of: firstTerm) {
+            
+            let beforeMatch = String(text[..<range.lowerBound])
+            let match = String(text[range])
+            let afterMatch = String(text[range.upperBound...])
+            
+            (Text(beforeMatch)
+                .font(.system(size: fontSize, weight: fontWeight))
+                .foregroundColor(textColor) +
+             Text(match)
+                .font(.system(size: fontSize, weight: .bold))
+                .foregroundColor(textColor) +
+             Text(afterMatch)
+                .font(.system(size: fontSize, weight: fontWeight))
+                .foregroundColor(textColor))
+        } else {
+            Text(text)
+                .font(.system(size: fontSize, weight: fontWeight))
+                .foregroundColor(textColor)
+        }
     }
 }

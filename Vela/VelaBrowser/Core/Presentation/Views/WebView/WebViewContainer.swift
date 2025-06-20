@@ -41,14 +41,14 @@ struct WebViewContainer: View {
                 hasInitialLoad = true
             }
         }
-        .onChange(of: viewModel.currentTab?.id) { oldId, newId in
-          
-            hasInitialLoad = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                loadInitialURL()
-                hasInitialLoad = true
-            }
-        }
+//        .onChange(of: viewModel.currentTab?.id) { oldId, newId in
+//          
+//            hasInitialLoad = false
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+//                loadInitialURL()
+//                hasInitialLoad = true
+//            }
+//        }
     }
 
     private func loadInitialURL() {

@@ -13,6 +13,7 @@ struct TabRow: View {
     let onHover: (Bool) -> Void
     @State var isMuted: Bool = false
     @State private var isMuteButtonHovered: Bool = false
+    @Environment(\.colorScheme) var scheme
     
     var body: some View {
         HStack(spacing: 8) {
@@ -24,7 +25,7 @@ struct TabRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(tab.title)
                     .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                    .foregroundColor(isSelected ? .primary : .secondary)
+                    .foregroundColor(isSelected ? .black : .secondary)
                     .lineLimit(1)
                     .animation(.easeInOut(duration: 0.3), value: tab.title)
                     .transition(.opacity.combined(with: .slide))
@@ -110,7 +111,7 @@ struct TabRow: View {
             }
             
             // Close button (shown on hover or selection)
-            if isHovered || isSelected {
+            if isHovered  {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .medium))
@@ -118,7 +119,21 @@ struct TabRow: View {
                         .frame(width: 16, height: 16)
                         .background(
                             Circle()
-                                .fill(Color(NSColor.separatorColor).opacity(0.3))
+                                .fill(Color(NSColor.tertiaryLabelColor).opacity(0.3))
+                        )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .transition(.scale.combined(with: .opacity))
+            }
+            if isSelected{
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.primary)
+                        .frame(width: 16, height: 16)
+                        .background(
+                            Circle()
+                                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
                         )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -132,7 +147,7 @@ struct TabRow: View {
                 .fill(
                     isSelected ?
                     Color.white :
-                    Color(NSColor.controlBackgroundColor).opacity(isHovered ? 1.0 : 0)
+                        Color(NSColor.quaternaryLabelColor).opacity(isHovered ? 1.0 : 0)
                 )
                 .shadow(
                     color: isSelected ? Color.black.opacity(0.1) : Color.clear,

@@ -41,12 +41,7 @@ struct BrowserView: View {
                 if !viewModel.isInBoardMode {
                     // Browser mode - show toolbar and web content
                     if let currentTab = viewModel.currentTab {
-                        if currentTab.hasLoadFailed {
-                            // Show failed to load view
-                            FailedToLoadView(tab: currentTab) {
-                                viewModel.reload()
-                            }
-                        } else if currentTab.webView != nil {
+                       if currentTab.webView != nil {
                             // Active tab with web view
                             WebViewContainer(
                                 viewModel: viewModel,
@@ -81,11 +76,11 @@ struct BrowserView: View {
             .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
             .padding(5)
         }
-        .overlay(alignment: .bottomTrailing, content: {
-            SchemeInfoPopup(detector: shchemaDetector, color: viewModel.currentSpace?.displayColor ?? .blue)
-                .padding(7)
-                .frame(maxWidth: 300)
-        })
+//        .overlay(alignment: .bottomTrailing, content: {
+//            SchemeInfoPopup(detector: shchemaDetector, color: viewModel.currentSpace?.displayColor ?? .blue)
+//                .padding(7)
+//                .frame(maxWidth: 300)
+//        })
         .animation(.easeInOut(duration: 0.3), value: viewModel.estimatedProgress)
         .browserKeyboardShortcuts(viewModel: viewModel)
         .sheet(isPresented: $viewModel.showCommandPalette) {
@@ -119,11 +114,7 @@ struct BrowserView: View {
                     addressText: $viewModel.addressText,
                     onURLSubmit: { urlString in
                         Task(priority: .high) {
-                            self.viewModel.addressText = ""
-                            guard let url = viewModel.getUrl(urlString) else {
-                                return
-                            }
-                            viewModel.createNewTab(with: url, inBackground: false, shouldReloadTabs: false, focusAddressBar: false, folderId: nil)
+                            viewModel.navigateToURL(urlString)
                         }
                     },
                     suggestionVM: suggestionViewModel

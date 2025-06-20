@@ -318,26 +318,24 @@ struct TabsSection: View {
     }
     
     private func updateSlideDirection() {
-        guard let currentSpace = viewModel.currentSpace else {
-            slideDirection = .none
-            return
-        }
-        
         let spaces = viewModel.spaces
-        
-        guard let currentIndex = spaces.firstIndex(where: { $0.id == currentSpace.id }) else {
+        guard let currentSpace = viewModel.currentSpace,
+              let currentIndex = spaces.firstIndex(where: { $0.id == currentSpace.id }) else {
             slideDirection = .none
+            previousSpaceIndex = 0
             return
         }
         
+        // Determine direction based on index comparison
         if currentIndex > previousSpaceIndex {
-            slideDirection = .right
+            slideDirection = .right // Forward animation
         } else if currentIndex < previousSpaceIndex {
-            slideDirection = .left
+            slideDirection = .left // Backward animation
         } else {
-            slideDirection = .none
+            slideDirection = .none // No change in space
         }
         
+        // Update previous index after determining direction
         previousSpaceIndex = currentIndex
     }
 }
