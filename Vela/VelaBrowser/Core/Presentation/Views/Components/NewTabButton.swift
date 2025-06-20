@@ -30,7 +30,7 @@ struct NewTabButton: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(
                         isHovered ?
-                        Color(NSColor.controlAccentColor).opacity(0.1) :
+                        Color(NSColor.quaternaryLabelColor) :
                         Color.clear
                     )
             )

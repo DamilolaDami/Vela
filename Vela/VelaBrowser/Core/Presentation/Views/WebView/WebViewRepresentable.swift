@@ -156,7 +156,7 @@ struct WebViewRepresentable: NSViewRepresentable {
     @Binding var isLoading: Bool
     @Binding var estimatedProgress: Double
     let browserViewModel: BrowserViewModel
-    let suggestionViewModel: SuggestionViewModel
+    let suggestionViewModel: AddressBarViewModel
     let noteViewModel: NoteBoardViewModel
  
 

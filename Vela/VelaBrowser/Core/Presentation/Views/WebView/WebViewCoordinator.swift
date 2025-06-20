@@ -1,4 +1,4 @@
-// MARK: - Fixed WebViewCoordinator with proper download support
+// MARK: - Fixed WebViewCoordinator with proper download support and error handling
 @preconcurrency import WebKit
 import AppKit
 import Foundation
@@ -8,7 +8,7 @@ import AVFAudio
 class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     var parent: WebViewRepresentable?
     var browserViewModel: BrowserViewModel?
-    var suggestionViewModel: SuggestionViewModel?
+    var suggestionViewModel: AddressBarViewModel?
     private let tabId: UUID
     private var webView: WKWebView?
     private var isObserving = false
@@ -27,7 +27,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         setupZoomObserver(tab: tab)
     }
     
-    // MARK: - Observer Management (unchanged)
+    // MARK: - Observer Management
     func addObservers(to webView: WKWebView) {
         guard !isObserving else { return }
         
@@ -42,9 +42,14 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         webView.addObserver(self, forKeyPath: #keyPath(WKWebView.title), options: [.new, .initial], context: nil)
         webView.addObserver(self, forKeyPath: #keyPath(WKWebView.url), options: [.new, .initial], context: nil)
         
-        // Apply initial zoom level
-        DispatchQueue.main.async {
-            webView.setMagnification(self.parent?.tab.zoomLevel ?? 1.0, centeredAt: .zero)
+        // Apply initial zoom level with error handling
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let parent = self.parent else { return }
+            do {
+                webView.setMagnification(parent.tab.zoomLevel, centeredAt: .zero)
+            } catch {
+                parent.tab.handleError(TabError.zoomError(level: parent.tab.zoomLevel, error: error), context: ["webView": webView])
+            }
         }
         
         isObserving = true
@@ -61,6 +66,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         isObserving = false
         self.webView = nil
     }
+    
     private func setupZoomObserver(tab: Tab) {
         zoomCancellable = tab.$zoomLevel
             .sink { [weak self] newZoomLevel in
@@ -68,22 +74,27 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                       let webView = self.webView,
                       tab.id == self.tabId else { return }
                 DispatchQueue.main.async {
-                    webView.setMagnification(newZoomLevel, centeredAt: .zero)
-                    tab.startZoomIndicator()
-                    self.parent?.suggestionViewModel.cancelSuggestions()
+                    do {
+                        webView.setMagnification(newZoomLevel, centeredAt: .zero)
+                        tab.startZoomIndicator()
+                        self.parent?.suggestionViewModel.cancelSuggestions()
+                    } catch {
+                        tab.handleError(TabError.zoomError(level: newZoomLevel, error: error), context: ["webView": webView])
+                    }
                 }
             }
     }
-    // MARK: - URL Loading (unchanged)
+    
+    // MARK: - URL Loading
     func loadURL(_ url: URL, in webView: WKWebView) {
         guard url != lastRequestedURL else { return }
-        parent?.suggestionViewModel.cancelSuggestions()
-        if let pending = pendingNavigation {
-            if webView.url != url {
-                lastRequestedURL = url
-                let request = URLRequest(url: url)
-                pendingNavigation = webView.load(request)
-            }
+        guard let parent = self.parent, parent.tab.id == self.tabId else { return }
+        
+        parent.suggestionViewModel.cancelSuggestions()
+        if let pending = pendingNavigation, webView.url != url {
+            lastRequestedURL = url
+            let request = URLRequest(url: url)
+            pendingNavigation = webView.load(request)
         } else {
             lastRequestedURL = url
             let request = URLRequest(url: url)
@@ -91,16 +102,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         }
     }
 
-    // MARK: - KVO 
-    private func setupObservers() {
-        guard let webView = webView else { return }
-        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.isLoading), options: [.new], context: nil)
-        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.estimatedProgress), options: [.new], context: nil)
-        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.title), options: [.new], context: nil)
-        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.url), options: [.new], context: nil)
-        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.magnification), options: [.new], context: nil)
-    }
-
+    // MARK: - KVO
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
         guard let webView = object as? WKWebView,
               webView == self.webView,
@@ -139,19 +141,17 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                     tab.url = newURL
                     self.lastRequestedURL = newURL
                     tabUpdated = true
-                    // Schedule favicon loading with a small delay
+                    // Schedule favicon loading with error handling
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        tab.loadFavicon(for: newURL)
+                        tab.loadFaviconWithErrorHandling(for: newURL)
                     }
-
                 }
                 
             case #keyPath(WKWebView.magnification):
                 if let newMagnification = change?[.newKey] as? CGFloat,
                    newMagnification != self.lastMagnification {
                     self.lastMagnification = newMagnification
-                    tab.zoomLevel = newMagnification
-                    tab.startZoomIndicator()
+                    tab.setZoomLevelSafely(newMagnification)
                     tabUpdated = true
                 }
                 
@@ -167,7 +167,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
                     tabUpdated = true
                 }
             }
-            
+            parent.browserViewModel.detectedSechema.scanSchemas(in: webView)
             parent.suggestionViewModel.cancelSuggestions()
             if tabUpdated {
                 self.browserViewModel?.updateTab(tab)
@@ -205,55 +205,43 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         let newURL = webView.url
         let oldHost = parent.tab.url?.host
         let newHost = newURL?.host
-        // Inject JavaScript to ensure full-screen API is available
-        _ = """
+        
+        // Inject JavaScript to ensure full-screen API is available with error handling
+        let fullscreenJS = """
         (function() {
-            // Polyfill for requestFullscreen across all elements
             function enableFullscreen(element) {
                 element.requestFullscreen = element.requestFullscreen ||
                     element.webkitRequestFullscreen ||
                     element.mozRequestFullScreen ||
                     element.msRequestFullscreen ||
                     function() { return Promise.reject(new Error('Fullscreen API is not supported')); };
-                
                 element.webkitEnterFullscreen = element.webkitEnterFullscreen ||
-                    function() { 
-                        if (element.requestFullscreen) {
-                            element.requestFullscreen();
-                        }
-                    };
+                    function() { if (element.requestFullscreen) { element.requestFullscreen(); } };
             }
-            
-            // Apply to all elements
             document.querySelectorAll('*').forEach(enableFullscreen);
-            
-            // Apply to document.documentElement and video elements specifically
             enableFullscreen(document.documentElement);
             document.querySelectorAll('video').forEach(enableFullscreen);
-            
-            // Observe DOM changes to apply to dynamically added elements
             const observer = new MutationObserver(function(mutations) {
                 mutations.forEach(function(mutation) {
                     mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) { // Element nodes only
+                        if (node.nodeType === 1) {
                             enableFullscreen(node);
-                            if (node.tagName === 'VIDEO') {
-                                enableFullscreen(node);
-                            }
+                            if (node.tagName === 'VIDEO') { enableFullscreen(node); }
                         }
                     });
                 });
             });
-            
             observer.observe(document, { childList: true, subtree: true });
-            
-            // Ensure YouTube-specific fullscreen support
             window.webkitSupportsFullscreen = true;
-            window.webkitEnterFullscreen = function() {
-                document.documentElement.requestFullscreen();
-            };
+            window.webkitEnterFullscreen = function() { document.documentElement.requestFullscreen(); };
         })();
         """
+        
+        parent.tab.evaluateJavaScriptSafely(fullscreenJS) { [weak self] _, error in
+            if let error = error {
+                self?.parent?.tab.handleError(TabError.jsEvaluationError(script: "Fullscreen API injection", error: error), context: ["webView": webView])
+            }
+        }
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
@@ -269,14 +257,13 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             }
         }
     }
+    
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
         if type == .microphone {
-            // On macOS, microphone permission is managed by system settings.
-            // Since we can't check permission status programmatically, assume permission is granted if prompt was shown previously.
-            // For better UX, you could show a custom dialog to inform the user.
-            decisionHandler(.prompt) // Show system prompt if not already granted
+            decisionHandler(.prompt)
         } else {
-            decisionHandler(.deny) // Deny other capture types (e.g., camera) if not needed
+            decisionHandler(.deny)
+            parent?.tab.handleError(TabError.securityError(url: webView.url, description: "Denied media capture for type \(type.rawValue)"), context: ["origin": origin.host, "type": type.rawValue])
         }
     }
     
@@ -288,23 +275,24 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         handleNavigationError(navigation: navigation, error: error)
     }
     
-    // MARK: - FIXED Download Policy Decision
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard let parent = self.parent, parent.tab.id == self.tabId else { return }
+        parent.tab.handleError(TabError.webProcessCrash(tabId: tabId), context: ["webView": webView, "url": webView.url as Any])
+    }
+    
+    // MARK: - Download Policy Decision
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        
-        
         let mimeType = navigationResponse.response.mimeType ?? ""
         let isDownload = shouldDownloadFile(mimeType: mimeType, response: navigationResponse.response)
         
-        
         if isDownload {
-           
             decisionHandler(.download)
         } else {
             decisionHandler(.allow)
         }
     }
     
-    // MARK: - FIXED Download Delegate Methods
+    // MARK: - Download Delegate Methods
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
         print("📥 Navigation response became download")
         download.delegate = self
@@ -320,7 +308,8 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         print("📥 Download destination requested for: \(suggestedFilename)")
         
         guard let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
-            print("❌ Could not access Downloads folder")
+            let error = TabError.networkError(code: -1, description: "Could not access Downloads folder", url: nil)
+            parent?.tab.handleError(error, context: ["suggestedFilename": suggestedFilename])
             completionHandler(nil)
             return
         }
@@ -332,9 +321,10 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         
         // Create download item
         DispatchQueue.main.async { [weak self] in
+            guard let self = self, let parent = self.parent else { return }
             let downloadItem = DownloadItem(filename: finalURL.lastPathComponent, url: finalURL, download: download)
-            self?.browserViewModel?.addDownload(downloadItem)
-            self?.downloadAssociations[download] = downloadItem
+           // self.browserViewModel?.addDownload(downloadItem)
+            self.downloadAssociations[download] = downloadItem
         }
         
         completionHandler(finalURL)
@@ -351,9 +341,8 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         print("📥 Download progress: \(Int(progress * 100))% (\(totalBytesWritten)/\(totalBytesExpectedToWrite) bytes)")
         
         DispatchQueue.main.async { [weak self] in
-            if let downloadItem = self?.downloadAssociations[download] {
-                downloadItem.updateProgress(progress, bytesReceived: totalBytesWritten, totalBytes: totalBytesExpectedToWrite)
-            }
+            guard let downloadItem = self?.downloadAssociations[download] else { return }
+            downloadItem.updateProgress(progress, bytesReceived: totalBytesWritten, totalBytes: totalBytesExpectedToWrite)
         }
     }
     
@@ -361,15 +350,14 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         print("📥 Download finished with error: \(error?.localizedDescription ?? "none")")
         
         DispatchQueue.main.async { [weak self] in
-            if let downloadItem = self?.downloadAssociations[download] {
-                if let error = error {
-                    downloadItem.fail(with: error)
-                } else {
-                    downloadItem.complete()
-                }
-                // Clean up association
-                self?.downloadAssociations.removeValue(forKey: download)
+            guard let self = self, let downloadItem = self.downloadAssociations[download] else { return }
+            if let error = error {
+                downloadItem.fail(with: error)
+                self.parent?.tab.handleError(TabError.networkError(code: (error as NSError).code, description: error.localizedDescription, url: downloadItem.url), context: ["filename": downloadItem.filename])
+            } else {
+                downloadItem.complete()
             }
+            self.downloadAssociations.removeValue(forKey: download)
         }
     }
     
@@ -377,17 +365,14 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         print("✅ Download completed successfully")
         
         DispatchQueue.main.async { [weak self] in
-            if let downloadItem = self?.downloadAssociations[download] {
-                downloadItem.complete()
-                // Clean up association
-                self?.downloadAssociations.removeValue(forKey: download)
-            }
+            guard let self = self, let downloadItem = self.downloadAssociations[download] else { return }
+            downloadItem.complete()
+            self.downloadAssociations.removeValue(forKey: download)
         }
     }
     
-    // MARK: - IMPROVED Download Detection
+    // MARK: - Download Detection
     private func shouldDownloadFile(mimeType: String, response: URLResponse) -> Bool {
-        // Check Content-Disposition header first (most reliable)
         if let httpResponse = response as? HTTPURLResponse {
             if let contentDisposition = httpResponse.allHeaderFields["Content-Disposition"] as? String {
                 let disposition = contentDisposition.lowercased()
@@ -398,12 +383,9 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             }
         }
         
-        // Common download MIME types
         let downloadMimeTypes = [
-            // Images
             "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp",
             "image/svg+xml", "image/bmp", "image/tiff", "image/ico",
-            // Documents
             "application/pdf",
             "application/msword",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -412,25 +394,18 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             "application/vnd.ms-powerpoint",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "text/plain", "text/csv",
-            // Archives
             "application/zip", "application/x-zip-compressed",
             "application/x-rar-compressed", "application/x-7z-compressed",
             "application/gzip", "application/x-tar",
-            // Media
             "video/mp4", "video/avi", "video/mov", "video/wmv", "video/webm", "video/mkv",
             "audio/mp3", "audio/wav", "audio/aac", "audio/ogg", "audio/flac", "audio/m4a",
-            // Other
             "application/octet-stream",
             "application/x-executable",
             "application/x-msdos-program"
         ]
         
         let normalizedMimeType = mimeType.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let shouldDownload = downloadMimeTypes.contains(normalizedMimeType)
-        
-      
-        
-        return shouldDownload
+        return downloadMimeTypes.contains(normalizedMimeType)
     }
     
     // MARK: - Helper Methods
@@ -475,14 +450,16 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         
         let nsError = error as NSError
         if nsError.domain != NSURLErrorDomain || nsError.code != NSURLErrorCancelled {
-            print("Navigation failed: \(error.localizedDescription)")
+            parent.tab.handleError(TabError.navigationFailed(url: webView?.url, error: error), context: [
+                "navigation": navigation as Any,
+                "errorDomain": nsError.domain,
+                "errorCode": nsError.code
+            ])
         }
     }
 
     // MARK: - WKUIDelegate - New Tab Support
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        
-        // Check if this is a custom contextual menu action
         if let customWebView = webView as? CustomWKWebView,
            let customAction = customWebView.contextualMenuAction {
             
@@ -491,29 +468,26 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
             DispatchQueue.main.async { [weak self] in
                 switch customAction {
                 case .openInNewTab:
-                    // Open in new tab (background by default, foreground if user wants)
                     self?.browserViewModel?.createNewTab(with: url, inBackground: false, focusAddressBar: false)
                 case .openInNewWindow:
-                    // Create new window with the URL
-                    self?.browserViewModel?.createNewWindow(with: url)
+                    self?.browserViewModel?.createNewTab(with: url, inBackground: false, focusAddressBar: false)
+                 //   self?.browserViewModel?.createNewWindow(with: url)
                 }
             }
             
-            return nil // Don't create a new web view
+            return nil
         }
         
-        // Handle regular new window requests (like target="_blank" links)
         guard let url = navigationAction.request.url,
               let browserViewModel = self.browserViewModel else { return nil }
         
-        // Check if this should open in a new window based on window features
         let shouldOpenInNewWindow = windowFeatures.width != nil ||
                                    windowFeatures.height != nil ||
                                    navigationAction.modifierFlags.contains([.command, .option])
         
         DispatchQueue.main.async {
             if shouldOpenInNewWindow {
-                browserViewModel.createNewWindow(with: url)
+              //  browserViewModel.createNewWindow(with: url)
             } else {
                 let inBackground = navigationAction.modifierFlags.contains(.command)
                 browserViewModel.createNewTab(with: url, inBackground: inBackground, focusAddressBar: false)
@@ -540,22 +514,12 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
     }
     
     private func shouldOpenInNewTab(navigationAction: WKNavigationAction) -> Bool {
-        if navigationAction.modifierFlags.contains(.command) {
+        if navigationAction.modifierFlags.contains(.command) ||
+           navigationAction.modifierFlags.contains([.command, .shift]) ||
+           navigationAction.buttonNumber == 2 ||
+           navigationAction.targetFrame == nil {
             return true
         }
-        
-        if navigationAction.modifierFlags.contains([.command, .shift]) {
-            return true
-        }
-        
-        if navigationAction.buttonNumber == 2 {
-            return true
-        }
-        
-        if navigationAction.targetFrame == nil {
-            return true
-        }
-        
         return false
     }
 
@@ -566,132 +530,5 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownlo
         pendingNavigation = nil
         downloadAssociations.removeAll()
         print("WebViewCoordinator deinit for tab: \(tabId)")
-    }
-}
-
-
-
-// MARK: - FIXED BrowserViewModel Extension
-extension BrowserViewModel {
-    func addDownload(_ downloadItem: DownloadItem) {
-        downloads.append(downloadItem)
-        print("📥 Added download: \(downloadItem.filename)")
-    }
-    
-    var activeDownloadsCount: Int {
-        return downloads.filter { $0.isDownloading }.count
-    }
-    
-    func removeDownload(_ download: DownloadItem) {
-        if let index = downloads.firstIndex(where: { $0.id == download.id }) {
-            // Cancel download if still in progress
-            if download.isDownloading {
-                download.download?.cancel { _ in }
-            }
-            downloads.remove(at: index)
-        }
-    }
-    
-    func clearAllDownloads() {
-        // Cancel any active downloads
-        for download in downloads where download.isDownloading {
-            download.download?.cancel { _ in }
-        }
-        downloads.removeAll()
-    }
-    
-    func showDownloadInFinder(_ download: DownloadItem) {
-        NSWorkspace.shared.selectFile(download.url.path, inFileViewerRootedAtPath: "")
-    }
-}
-
-
-
-extension WebViewRepresentable {
-    
-    // Helper method to create the custom web view
-    static func createCustomWebView(configuration: WKWebViewConfiguration, browserViewModel: BrowserViewModel?) -> CustomWKWebView {
-        let webView = CustomWKWebView(frame: .zero, configuration: configuration)
-        webView.browserViewModel = browserViewModel
-        
-        // Configure other webview properties as needed
-        webView.allowsBackForwardNavigationGestures = true
-        webView.allowsMagnification = true
-        
-        return webView
-    }
-}
-
-
-
-extension BrowserViewModel {
-    
-    /// Creates a new browser window with the specified URL
-    func createNewWindow(with url: URL? = nil) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            // Create configuration for the new web view
-            let configuration = WKWebViewConfiguration()
-            configuration.allowsAirPlayForMediaPlayback = true
-            configuration.mediaTypesRequiringUserActionForPlayback = []
-            
-            // Create a new AudioObservingWebView for the new window
-            let webView = AudioObservingWebView(frame: .zero, configuration: configuration)
-            webView.allowsBackForwardNavigationGestures = true
-            webView.allowsMagnification = true
-            webView.startObservingAudio()
-            
-            // Create a new NSWindow
-            let window = NSWindow(
-                contentRect: NSRect(x: 100, y: 100, width: 1200, height: 800),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                backing: .buffered,
-                defer: false
-            )
-            
-            // Configure window properties
-            window.title = url?.host ?? "New Browser Window"
-            window.center()
-            window.setFrameAutosaveName("BrowserWindow")
-            
-            // Set up the web view as the window's content view
-            window.contentView = webView
-            
-            // Create a new tab for this window's web view
-            let newTab = Tab(url: url ?? URL(string: "about:blank")!)
-            
-            // Create coordinator for the web view
-            let coordinator = WebViewCoordinator(
-                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self, suggestionViewModel: self.suggestionVM, noteViewModel: self.noteboardVM),
-                tab: newTab
-            )
-            coordinator.browserViewModel = self
-            
-            // Set up web view delegates
-            webView.navigationDelegate = coordinator
-            webView.uiDelegate = coordinator
-            
-            // Add observers
-            coordinator.addObservers(to: webView)
-            
-            // Make the window visible
-            window.makeKeyAndOrderFront(nil)
-            
-            // Load the URL if provided
-            if let url = url {
-                coordinator.loadURL(url, in: webView)
-                print("🪟 Created new window for URL: \(url.absoluteString)")
-            } else {
-                // Load a default page or about:blank
-                if let defaultURL = URL(string: "about:blank") {
-                    coordinator.loadURL(defaultURL, in: webView)
-                }
-                print("🪟 Created new blank window")
-            }
-            
-            // Track the window (optional, for management)
-            WindowManager.shared.addWindow(window, with: coordinator)
-        }
     }
 }

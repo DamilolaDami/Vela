@@ -21,7 +21,7 @@ struct StartPageView: View {
                 title: "New Tab",
                 icon: "plus",
                 color: .blue,
-                action: { viewModel.createNewTab() }
+                action: { viewModel.startCreatingNewTab() }
             ),
             QuickAction(
                 title: "Bookmarks",
@@ -66,7 +66,7 @@ struct StartPageView: View {
     ]
     
     var body: some View {
-        GeometryReader { geometry in
+        
             ZStack {
                 // Clean white background
                 Color.white
@@ -74,8 +74,7 @@ struct StartPageView: View {
                 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 0) {
-                        Spacer()
-                            .frame(height: max(80, geometry.safeAreaInsets.top + 60))
+                      
                         
                         VStack(spacing: 48) {
                             // Clean title section
@@ -198,7 +197,7 @@ struct StartPageView: View {
                         }
                         .padding(.horizontal, 32)
                     }
-                }
+               
             }
         }
         .onAppear {

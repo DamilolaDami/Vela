@@ -4,50 +4,44 @@ struct SidebarView: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
     @ObservedObject var boardVM: NoteBoardViewModel
+    @ObservedObject var bookMarkViewModel: BookmarkViewModel
+    @ObservedObject var suggestionViewModel: AddressBarViewModel
+    
     @State private var hoveredTab: UUID?
     
     var body: some View {
         VStack(spacing: 0) {
             // Header with space selector
-            SidebarHeader(viewModel: viewModel)
+            SidebarHeader(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel)
             
-            ScrollView {
-                VStack(spacing: 24) {
+            ScrollView (showsIndicators: false){
+                VStack(spacing: 10) {
+                    BrowserToolbar(
+                        viewModel: viewModel,
+                        bookmarkViewModel: bookMarkViewModel,
+                        suggestionVM: suggestionViewModel
+                    )
                     QuickAccessGrid(viewModel: viewModel)
                     NoteBoardSection(boardVM: boardVM, viewModel: viewModel, onBoardSelected: {
                         viewModel.currentSpace = nil
                     })
+                    FolderSection(
+                                           viewModel: viewModel,
+                                           previewManager: previewManager,
+                                           hoveredTab: $hoveredTab
+                                       )
                     TabsSection(
                         viewModel: viewModel, previewManager: previewManager,
                         hoveredTab: $hoveredTab
                     )
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
+                .padding(.horizontal, 10)
+                .padding(.top, 5)
             }
             
             BottomActions(viewModel: viewModel)
         }
-      
-        .background(
-            LinearGradient(
-                stops: [
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.4), location: 0.0),
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.2), location: 0.3),
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.2), location: 0.7),
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.1), location: 1.0),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .overlay(
-            // Colored border instead of gray
-            Rectangle()
-                .fill(currentSpaceColor.opacity(0.15))
-                .frame(width: 1)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        )
+        
         .sheet(isPresented: $viewModel.isShowingCreateSpaceSheet) {
             SpaceCreationSheet(viewModel: viewModel)
         }
@@ -55,6 +49,6 @@ struct SidebarView: View {
     
     private var currentSpaceColor: Color {
         guard let space = viewModel.currentSpace else { return .blue }
-        return Color.spaceColor(space.color)
+        return space.displayColor
     }
 }

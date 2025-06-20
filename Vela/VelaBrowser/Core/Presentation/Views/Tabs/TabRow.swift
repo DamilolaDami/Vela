@@ -1,18 +1,11 @@
-//
-//  TabRow.swift
-//  Vela
-//
-//  Created by damilola on 5/30/25.
-//
-
 import SwiftUI
 
-// MARK: -  Tab Row
+// MARK: - Tab Row
 
 struct TabRow: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
-    @ObservedObject var tab: Tab
+    let tab: Tab
     let isSelected: Bool
     let isHovered: Bool
     let onSelect: () -> Void
@@ -25,7 +18,7 @@ struct TabRow: View {
         HStack(spacing: 8) {
             // Favicon or default icon
             TabIcon(tab: tab)
-            .id(tab.favicon?.hashValue ?? 0)
+                .id(tab.favicon?.hashValue ?? 0)
             
             // Title with animation
             VStack(alignment: .leading, spacing: 1) {
@@ -35,13 +28,6 @@ struct TabRow: View {
                     .lineLimit(1)
                     .animation(.easeInOut(duration: 0.3), value: tab.title)
                     .transition(.opacity.combined(with: .slide))
-                
-                if let url = tab.url {
-                    Text(url.host ?? "")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
-                        .lineLimit(1)
-                }
             }
             
             Spacer()
@@ -59,23 +45,17 @@ struct TabRow: View {
                             .fill(
                                 LinearGradient(
                                     gradient: Gradient(colors: [
-                                        isMuted ?
-                                            Color.red.opacity(0.2) :
-                                            Color.blue.opacity(0.2),
-                                        isMuted ?
-                                            Color.red.opacity(0.1) :
-                                            Color.blue.opacity(0.1)
+                                        isMuted ? Color.red.opacity(0.2) : Color.blue.opacity(0.2),
+                                        isMuted ? Color.red.opacity(0.1) : Color.blue.opacity(0.1)
                                     ]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 22, height: 22)
+                            .frame(width: 20, height: 20)
                             .scaleEffect(isMuteButtonHovered ? 1.1 : 1.0)
                             .shadow(
-                                color: isMuted ?
-                                    Color.red.opacity(0.3) :
-                                    Color.blue.opacity(0.3),
+                                color: isMuted ? Color.red.opacity(0.3) : Color.blue.opacity(0.3),
                                 radius: isMuteButtonHovered ? 4 : 2,
                                 x: 0,
                                 y: 1
@@ -83,7 +63,7 @@ struct TabRow: View {
                         
                         // Icon with enhanced styling
                         Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 8, weight: .semibold))
                             .foregroundStyle(
                                 LinearGradient(
                                     gradient: Gradient(colors: [
@@ -100,7 +80,7 @@ struct TabRow: View {
                         if !isMuted {
                             Circle()
                                 .stroke(Color.blue.opacity(0.4), lineWidth: 1)
-                                .frame(width: 26, height: 26)
+                                .frame(width: 20, height: 20)
                                 .scaleEffect(1.0)
                                 .opacity(0.0)
                                 .animation(
@@ -145,7 +125,6 @@ struct TabRow: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
-      
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
@@ -178,18 +157,8 @@ struct TabRow: View {
         }
         // Simplified hover detection using onHover modifier
         .onHover { hovering in
-           
-            
-            if hovering {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    onHover(true)
-                }
-                
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    onHover(false)
-                }
-                
+            withAnimation(.easeInOut(duration: 0.2)) {
+                onHover(hovering)
             }
         }
     }
@@ -230,7 +199,6 @@ struct TabRow: View {
                 print("Mute toggle error: \(error.localizedDescription)")
             } else if let newMuteState = result as? Bool {
                 print("Tab \(tab.title) mute state changed to: \(newMuteState)")
-                // Optionally update UI or trigger audio check
                 isMuted = newMuteState
             }
         }
@@ -242,7 +210,7 @@ struct TabIcon: View {
     
     var body: some View {
         ZStack {
-            Circle()
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(Color(NSColor.quaternaryLabelColor))
                 .frame(width: 20, height: 20)
             
@@ -255,12 +223,11 @@ struct TabIcon: View {
                         .frame(width: 16, height: 16)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                         .shadow(color: Color(NSColor.shadowColor).opacity(0.2), radius: 1, x: 0, y: 0.5)
-                        .onChange(of: tab.favicon) {_, _ in
+                        .onChange(of: tab.favicon) { _, _ in
                             print("Favicon updated for tab: \(tab.title)")
                         }
                 } else {
-                    // Just show a soft gray circle, no loading indicator
-                    Circle()
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .fill(Color.gray.opacity(0.3))
                         .frame(width: 16, height: 16)
                 }
@@ -268,7 +235,6 @@ struct TabIcon: View {
         }
     }
 }
-
 
 // MARK: - Tab Context Menu
 struct TabContextMenu: View {
@@ -297,15 +263,45 @@ struct TabContextMenu: View {
             
             Divider()
             
-            Button("Close Tab") {
-                viewModel.closeTab(tab)
+            // Move to Folder submenu
+            Menu("Move to Folder") {
+                ForEach(viewModel.folders.sorted { $0.position < $1.position }, id: \.id) { folder in
+                    Button(folder.name) {
+                        viewModel.addTab(tab, to: folder)
+                    }
+                }
+                
+                Divider()
+                
+                Button("New Folder") {
+                    guard let spaceId = viewModel.currentSpace?.id else { return }
+                    let newFolder = Folder(name: "New Folder", spaceId: spaceId, position: viewModel.folders.count)
+                    viewModel.createFolder(name: newFolder.name)
+                    viewModel.addTab(tab, to: newFolder)
+                }
             }
             
+            Divider()
+            
+            Button("Close Tab") {
+                if tab.folderId != nil {
+                    if let folder = viewModel.folders.first(where: { $0.id == tab.folderId }) {
+                        viewModel.removeTab(tab, from: folder)
+                        NotificationService.shared.show(type: .success, title: "Tab removed from folder")
+                    } else {
+                        print("Error: Folder with ID \(tab.folderId!) not found")
+                        viewModel.closeTab(tab)
+                    }
+                } else {
+                    viewModel.closeTab(tab)
+                }
+            }
+
             Button("Close Other Tabs") {
                 viewModel.closeOtherTabs(except: tab)
             }
             
-            Button("Close Tabs below this tab") {
+            Button("Close Tabs Below This Tab") {
                 viewModel.closeTabsToRight(of: tab)
             }
         }

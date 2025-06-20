@@ -4,7 +4,7 @@ import WebKit
 struct WebViewContainer: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var noteBoardViewModel: NoteBoardViewModel
-    @ObservedObject var suggestionViewModel: SuggestionViewModel
+    @ObservedObject var suggestionViewModel: AddressBarViewModel
     @State private var hasInitialLoad = false
 
     var body: some View {

@@ -18,7 +18,8 @@ struct GoogleSuggestionResponse: Codable {
     }
 }
 
-class SuggestionViewModel: ObservableObject {
+class AddressBarViewModel: ObservableObject {
+    @Published var isShowingEnterAddressPopup = false
     @Published var suggestions: [SearchSuggestion] = []
     @Published var isShowingSuggestions: Bool = false
     @Published var selectedIndex: Int? = nil // For keyboard navigation
@@ -186,5 +187,9 @@ class SuggestionViewModel: ObservableObject {
         }
         currentTask?.cancel()
         currentTask = nil
+    }
+    
+    func toggleShowingEnterAddressPopup(_ value: Bool) {
+        isShowingEnterAddressPopup = value
     }
 }

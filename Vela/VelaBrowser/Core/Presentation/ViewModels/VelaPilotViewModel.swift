@@ -879,7 +879,7 @@ class VelaPilotViewModel: ObservableObject {
         case .closeTab:
             browserViewModel.closeCurrentTab()
         case .newTab:
-            browserViewModel.createNewTab(shouldReloadTabs: false, focusAddressBar: true)
+            browserViewModel.startCreatingNewTab()
         case .bookmarkPage:
             print("opening bookmark for selected")
             bookmarkViewModel.showAddBookmarkSheet()

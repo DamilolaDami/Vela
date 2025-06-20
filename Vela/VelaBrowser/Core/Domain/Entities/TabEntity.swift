@@ -36,10 +36,13 @@ class TabEntity {
     // Optional: History and Session Data
     var sessionData: Data?
     var scrollPosition: Double
+    var folderId: UUID?
+    
     
     // Relationships
     @Relationship var space: SpaceEntity?
     @Relationship var historyEntries: [HistoryEntity]?
+    @Relationship var folders: [FolderEntity]?
     
     // MARK: - Convenience Initializers
     init(from tab: Tab) {
@@ -59,6 +62,7 @@ class TabEntity {
         self.scrollPosition = 0.0
         self.space = nil
         self.historyEntries = nil
+        self.folderId = tab.folderId
     }
     
     // MARK: - Domain Model Conversion
@@ -77,7 +81,8 @@ class TabEntity {
             createdAt: self.createdAt ?? Date(),
             lastAccessedAt: self.lastAccessedAt ?? Date(),
             isPinned: self.isPinned,
-            position: Int(self.position)
+            position: Int(self.position),
+            folderId: self.folderId
         )
     }
     
@@ -91,5 +96,6 @@ class TabEntity {
         self.lastAccessedAt = Date()
         self.isPinned = tab.isPinned
         self.position = Int32(tab.position)
+        self.folderId = tab.folderId
     }
 }

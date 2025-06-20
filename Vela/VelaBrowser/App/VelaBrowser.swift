@@ -14,11 +14,12 @@ struct VelaApp: App {
     @NSApplicationDelegateAdaptor(VelaAppDelegate.self) var appDelegate
     @State var onboardingVM = OnboardingViewModel()
     @StateObject private var quitManager = QuitManager()
+    
     var body: some Scene {
         WindowGroup {
             createMainView()
                 .withNotificationBanners()
-                .frame(minWidth: 1360, minHeight: 700)
+                .frame(minWidth: 400, minHeight: 400)
                 .environment(\.appDependencies, appDependencies)
                 .onAppear(perform: configureAppDelegate)
                 .environmentObject(quitManager)
@@ -54,9 +55,10 @@ struct VelaApp: App {
             BrowserView(
                 viewModel: viewModels.browser,
                 bookMarkViewModel: viewModels.bookmark,
-                suggestionViewModel: viewModels.suggestion,
+                suggestionViewModel: viewModels.browser.addressBarVM,
                 velaPilotViewModel: viewModels.velaPilot,
-                noteBoardVM: viewModels.noteboard
+                noteBoardVM: viewModels.noteboard,
+                shchemaDetector: viewModels.browser.detectedSechema
             )
         } else {
             OnboardingView(viewModel: onboardingVM, broswerViewModel: viewModels.browser)
@@ -66,7 +68,7 @@ struct VelaApp: App {
     private func createViewModels() -> (
         browser: BrowserViewModel,
         bookmark: BookmarkViewModel,
-        suggestion: SuggestionViewModel,
+        suggestion: AddressBarViewModel,
         velaPilot: VelaPilotViewModel,
         noteboard: NoteBoardViewModel,
         onboarding: OnboardingViewModel
@@ -74,7 +76,7 @@ struct VelaApp: App {
         return (
             browser: appDependencies.makeBrowserViewModel(),
             bookmark: appDependencies.makeBookmarkViewModel(),
-            suggestion: appDependencies.makeSuggestionViewModel(),
+            suggestion: appDependencies.makeaddressBarViewModel(),
             velaPilot: appDependencies.makeVelaPilotViewModel(),
             noteboard: appDependencies.makeNoteBoardViewModel(),
             onboarding: OnboardingViewModel()

@@ -94,6 +94,10 @@ struct VelaCommands: Commands {
                 appDelegate.openSettingsWindow(nil)
             }
             .keyboardShortcut(",", modifiers: [.command])
+            Button("Import from Another Browser...") {
+                appDelegate.openSettingsWindow(nil)
+            }
+           
 
         }
         CommandGroup(replacing: .appSettings) {
@@ -307,8 +311,19 @@ struct VelaCommands: Commands {
                 }
             )) {
                 ForEach(browserViewModel.spaces) { space in
-                    Text(space.name)
-                        .tag(space.id)
+                    // Combine emoji and name for emoji case, keep HStack for others
+                    Group {
+                        if space.iconType == .emoji {
+                            Text("\(space.iconValue) \(space.name)")
+                        } else {
+                            HStack {
+                                space.displayIcon
+                                Text(space.name)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .tag(space.id)
                 }
             }
             .pickerStyle(.inline)
