@@ -11,12 +11,11 @@ struct FolderSection: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
     @Binding var hoveredTab: UUID?
-    
+    @Binding var draggedTab: Tab? // Add this binding
+    @Binding var isDragging: Bool
     @State private var isFolderHeaderHovered: Bool = false
     @State private var expandedFolders: Set<UUID> = []
-    @State private var draggedTab: Tab?
     @State private var dropZoneHighlight: UUID?
-    @State private var isDragging: Bool = false
     
     var body: some View {
         if !viewModel.folders.isEmpty {
@@ -316,7 +315,12 @@ struct FolderDropDelegate: DropDelegate {
             
             DispatchQueue.main.async {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    self.viewModel.addTab(draggedTab, to: self.folder)
+                    // Remove tab from its current folder (if any) and add to the new folder
+                    if let currentFolderId = draggedTab.folderId,
+                       let currentFolder = viewModel.folders.first(where: { $0.id == currentFolderId }) {
+                        viewModel.removeTab(draggedTab, from: currentFolder)
+                    }
+                    viewModel.addTab(draggedTab, to: self.folder)
                 }
                 self.cleanup()
             }

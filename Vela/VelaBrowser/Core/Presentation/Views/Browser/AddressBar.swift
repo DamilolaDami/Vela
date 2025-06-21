@@ -10,6 +10,7 @@ struct AddressBar: View {
     @StateObject private var certificateService = CertificateService()
     @State private var showingCertificate = false
     @State private var showCopyCheckmark = false
+    @State private var showSettings = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -65,8 +66,15 @@ struct AddressBar: View {
                             copyURL()
                         }
                     }
-                    ActionButton(icon: "gear", tooltip: "Settings", iconSize: 12.5) {
-                        
+                    if let url = viewModel.currentTab?.url{
+                        ActionButton(icon: "gear", tooltip: "Settings", iconSize: 12.5) {
+                            showSettings.toggle()
+                        }
+                        .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+                            SiteSettingsView(
+                                viewModel: viewModel.siteSettingsViewModel,
+                                siteUrl: url, spaceColor: viewModel.currentSpace?.displayColor ?? .blue)
+                        }
                     }
                 }
                 .padding(.trailing, 8)

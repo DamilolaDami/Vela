@@ -152,7 +152,7 @@ override func observeValue(forKeyPath keyPath: String?, of object: Any?, change:
             break
         }
         
-        if let audioWebView = webView as? AudioObservingWebView {
+        if let audioWebView = webView as? CustomWKWebView {
             let isAudioPlaying = audioWebView.isPlayingAudioPrivate
             if tab.isPlayingAudio != isAudioPlaying {
                 tab.isPlayingAudio = isAudioPlaying
@@ -583,35 +583,58 @@ private func handleNavigationError(navigation: WKNavigation?, error: Error) {
 }
 
 // MARK: - WKUIDelegate - New Tab/Window Support
-func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-    guard let url = navigationAction.request.url,
-          let browserViewModel = self.browserViewModel else { return nil }
-    
-    if let customWebView = webView as? CustomWKWebView,
-       let customAction = customWebView.contextualMenuAction {
-        DispatchQueue.main.async { [weak self] in
-            switch customAction {
-            case .openInNewTab:
-                self?.browserViewModel?.createNewTab(with: url, inBackground: false, focusAddressBar: false)
-            case .openInNewWindow:
-                self?.browserViewModel?.createNewWindow(with: url)
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        let callId = UUID().uuidString.prefix(8)
+        print("🚀 createWebViewWith called [\(callId)]")
+        print("  - URL: \(navigationAction.request.url?.absoluteString ?? "nil")")
+        print("  - WebView: \(webView)")
+        print("  - TabId: \(tabId)")
+        print("  - Target frame is nil: \(navigationAction.targetFrame == nil)")
+        
+        guard let url = navigationAction.request.url,
+              let browserViewModel = self.browserViewModel else {
+            print("❌ [\(callId)] Early return: missing URL or browserViewModel")
+            return nil
+        }
+        
+        // Check for custom contextual menu actions first
+        if let customWebView = webView as? CustomWKWebView,
+           let customAction = customWebView.contextualMenuAction {
+            print("🎯 [\(callId)] Custom action detected: \(customAction)")
+            
+            DispatchQueue.main.async { [weak self] in
+                print("🎯 [\(callId)] Executing custom action: \(customAction)")
+                
+                switch customAction {
+                case .openInNewTab:
+                    print("📑 [\(callId)] Creating new tab with URL: \(url)")
+                    browserViewModel.createNewTab(with: url, inBackground: false, focusAddressBar: false)
+                case .openInNewWindow:
+                    print("🪟 [\(callId)] Creating new window with URL: \(url)")
+                    browserViewModel.createNewWindow(with: url)
+                }
+                // Clear the contextualMenuAction immediately after handling
+                customWebView.contextualMenuAction = nil
+            }
+            return nil
+        }
+        
+        print("🔍 [\(callId)] No custom action, checking external handling...")
+        
+        // Fallback for non-custom actions
+        DispatchQueue.main.async {
+            if self.shouldHandleNavigationExternally(navigationAction, windowFeatures: windowFeatures) {
+                print("🪟 [\(callId)] Creating new window via external handling with URL: \(url)")
+                browserViewModel.createNewWindow(with: url)
+            } else {
+                let inBackground = navigationAction.modifierFlags.contains(.command)
+                print("📑 [\(callId)] Creating new tab via external handling with URL: \(url) (inBackground: \(inBackground))")
+                browserViewModel.createNewTab(with: url, inBackground: inBackground, focusAddressBar: false)
             }
         }
+        
         return nil
     }
-    
-    DispatchQueue.main.async {
-        if self.shouldHandleNavigationExternally(navigationAction, windowFeatures: windowFeatures) {
-            browserViewModel.createNewWindow(with: url)
-        } else {
-            let inBackground = navigationAction.modifierFlags.contains(.command)
-            browserViewModel.createNewTab(with: url, inBackground: inBackground, focusAddressBar: false)
-        }
-    }
-    
-    return nil
-}
-
 func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     if shouldHandleNavigationExternally(navigationAction) {
         if let url = navigationAction.request.url,
@@ -630,20 +653,30 @@ func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigatio
         decisionHandler(.allow)
     }
 }
-
-private func shouldHandleNavigationExternally(_ navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures? = nil) -> Bool {
-    if navigationAction.modifierFlags.contains(.command) ||
-       navigationAction.modifierFlags.contains([.command, .shift]) ||
-       navigationAction.buttonNumber == 2 ||
-       navigationAction.targetFrame == nil {
-        return true
+    private func shouldHandleNavigationExternally(_ navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures? = nil) -> Bool {
+        print("🔍 Navigation Debug:")
+        print("  - Command key: \(navigationAction.modifierFlags.contains(.command))")
+        print("  - Command+Shift: \(navigationAction.modifierFlags.contains([.command, .shift]))")
+        print("  - Button number: \(navigationAction.buttonNumber)")
+        print("  - Target frame is nil: \(navigationAction.targetFrame == nil)")
+        print("  - Navigation type: \(navigationAction.navigationType)")
+        
+        if let windowFeatures = windowFeatures {
+            print("  - Window width: \(windowFeatures.width?.description ?? "nil")")
+            print("  - Window height: \(windowFeatures.height?.description ?? "nil")")
+        } else {
+            print("  - Window features: nil")
+        }
+        
+        // Only handle externally for explicit window features, right-click, or Command+click
+        let shouldHandle = navigationAction.modifierFlags.contains(.command) ||
+                           navigationAction.modifierFlags.contains([.command, .shift]) ||
+                           navigationAction.buttonNumber == 2 ||
+                           (windowFeatures?.width != nil || windowFeatures?.height != nil)
+        
+        print("  - Should handle externally: \(shouldHandle)")
+        return shouldHandle
     }
-    if let windowFeatures = windowFeatures {
-        return windowFeatures.width != nil || windowFeatures.height != nil
-    }
-    return false
-}
-
 deinit {
     if let webView = self.webView {
         removeObservers(from: webView)

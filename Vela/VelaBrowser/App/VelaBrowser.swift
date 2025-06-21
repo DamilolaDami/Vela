@@ -35,6 +35,8 @@ struct VelaApp: App {
                     }
                 }
         }
+        .defaultSize(width: 500, height: 400)
+        .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .windowToolbarStyle(.unified(showsTitle: false))

@@ -843,21 +843,23 @@ extension BrowserViewModel {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
+            print("🪟 Creating new window...")
+            
             // Create configuration for the new web view
             let configuration = WKWebViewConfiguration()
             configuration.allowsAirPlayForMediaPlayback = true
             configuration.mediaTypesRequiringUserActionForPlayback = []
             
             // Create a new AudioObservingWebView for the new window
-            let webView = AudioObservingWebView(frame: .zero, configuration: configuration)
+            let webView = CustomWKWebView(frame: .zero, configuration: configuration)
             webView.allowsBackForwardNavigationGestures = true
             webView.allowsMagnification = true
-            webView.startObservingAudio()
+            webView.translatesAutoresizingMaskIntoConstraints = true // Disable Auto Layout
             
             // Create a new NSWindow
             let window = NSWindow(
-                contentRect: NSRect(x: 100, y: 100, width: 450, height: 450),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                contentRect: NSRect(x: 100, y: 100, width: 650, height: 650),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable], 
                 backing: .buffered,
                 defer: false
             )
@@ -865,27 +867,50 @@ extension BrowserViewModel {
             // Configure window properties
             window.title = url?.host ?? "New Browser Window"
             window.center()
-            window.setFrameAutosaveName("BrowserWindow")
+            window.setFrameAutosaveName("") // Disable autosaving to prevent size restoration
+            window.isReleasedWhenClosed = false
+           
             
-            // Set up the web view as the window's content view
-            window.contentView = webView
+            // Set web view frame to match content area
+            webView.frame = window.contentRect(forFrameRect: NSRect(x: 0, y: 0, width: 650, height: 650))
             
             // Create a new tab for this window's web view
             let newTab = Tab(url: url ?? URL(string: "about:blank")!, folderId: nil)
             
             // Create coordinator for the web view
             let coordinator = WebViewCoordinator(
-                WebViewRepresentable(tab: newTab, isLoading: .constant(false), estimatedProgress: .constant(0.0), browserViewModel: self, suggestionViewModel: self.addressBarVM, noteViewModel: self.noteboardVM),
+                WebViewRepresentable(
+                    tab: newTab,
+                    isLoading: .constant(false),
+                    estimatedProgress: .constant(0.0),
+                    browserViewModel: self,
+                    suggestionViewModel: self.addressBarVM,
+                    noteViewModel: self.noteboardVM
+                ),
                 tab: newTab
             )
+            
+            // Set up coordinator reference
             coordinator.browserViewModel = self
             
-            // Set up web view delegates
+            // Set up web view delegates BEFORE adding observers
             webView.navigationDelegate = coordinator
             webView.uiDelegate = coordinator
             
             // Add observers
             coordinator.addObservers(to: webView)
+            
+            // Start audio observation AFTER everything is set up
+            webView.startObservingAudio()
+            
+            // Set up the web view as the window's content view
+            window.contentView = webView
+            
+            // Add to window manager BEFORE making visible
+            WindowManager.shared.addWindow(window, with: coordinator)
+            
+            // Enforce window size
+            window.setFrame(NSRect(x: 100, y: 100, width: 650, height: 650), display: true)
             
             // Make the window visible
             window.makeKeyAndOrderFront(nil)
@@ -901,9 +926,6 @@ extension BrowserViewModel {
                 }
                 print("🪟 Created new blank window")
             }
-            
-            // Track the window (optional, for management)
-            WindowManager.shared.addWindow(window, with: coordinator)
         }
     }
 }

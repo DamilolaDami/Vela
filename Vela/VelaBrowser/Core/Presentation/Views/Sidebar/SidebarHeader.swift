@@ -185,23 +185,6 @@ struct DownloadsButton: View {
     }
 }
 
-// MARK: - Settings Button Sub-View
-struct SettingsButton: View {
-    @Binding var showSettings: Bool
-    var viewModel: BrowserViewModel
-    
-    var body: some View {
-        ActionButton(
-            icon: "gearshape.fill",
-            tooltip: "Settings"
-        ) {
-            showSettings.toggle()
-        }
-        .popover(isPresented: $showSettings, arrowEdge: .bottom) {
-            SettingsView(viewModel: viewModel)
-        }
-    }
-}
 
 
 // MARK: - Separator Sub-View

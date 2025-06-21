@@ -94,9 +94,15 @@ struct VelaCommands: Commands {
                 appDelegate.openSettingsWindow(nil)
             }
             .keyboardShortcut(",", modifiers: [.command])
-            Button("Import from Another Browser...") {
-                appDelegate.openSettingsWindow(nil)
+            if let url = browserViewModel.currentTab?.url{
+                Button("Settings for \(url.host() ?? "")...") {
+                   
+                }
             }
+            Button("Import from Another Browser...") {
+                appDelegate.browserViewModel?.isShowingImportFromOtherBrowserSheet = true
+            }
+            
            
 
         }

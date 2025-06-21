@@ -34,6 +34,8 @@ class BrowserViewModel: ObservableObject {
     @Published var folders: [Folder] = []
     @Published var tappedTab: Tab?
     @Published var downloadsManager: DownloadsManager?
+    @Published var siteSettingsViewModel: SiteSettingsViewModel
+    @Published var isShowingImportFromOtherBrowserSheet: Bool = false
     private var observers: [NSObjectProtocol] = []
      
     private var popupWindows: [WKWebView: NSWindow] = [:]
@@ -77,6 +79,7 @@ class BrowserViewModel: ObservableObject {
         self.addressBarVM = addressBarVM
         self.detectedSechema = detectedSechema
         self.downloadsManager = DownloadsManager()
+        self.siteSettingsViewModel = SiteSettingsViewModel(siteUrl: URL(string: "about:blank")!)
         setupInitialState()
         setupBindings()
         setupFolderBindings()
@@ -327,7 +330,7 @@ class BrowserViewModel: ObservableObject {
         configuration.preferences.isFraudulentWebsiteWarningEnabled = false
         configuration.applicationNameForUserAgent = "Safari/605.1.15"
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = CustomWKWebView(frame: .zero, configuration: configuration)
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
         // Set up the webView fully before any operations
@@ -947,7 +950,7 @@ class BrowserViewModel: ObservableObject {
         configuration.preferences.isFraudulentWebsiteWarningEnabled = false
         configuration.applicationNameForUserAgent = "Safari/605.1.15"
         
-        tab.webView = WKWebView(frame: .zero, configuration: configuration)
+        tab.webView = CustomWKWebView(frame: .zero, configuration: configuration)
         tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
         
         if let url = tab.url {

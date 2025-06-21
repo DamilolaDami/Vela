@@ -93,6 +93,9 @@ struct BrowserView: View {
         .sheet(isPresented: $quitManager.showingQuitDialog) {
             QuitDialog()
         }
+        .sheet(isPresented: $viewModel.isShowingImportFromOtherBrowserSheet, content: {
+            ImportFromExternalBrowserSheet()
+        })
         .background(
             LinearGradient(
                 stops: [

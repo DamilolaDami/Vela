@@ -5,16 +5,17 @@ struct TabsSection: View {
     @ObservedObject var previewManager: TabPreviewManager
     @Binding var hoveredTab: UUID?
     
+    @Binding var draggedTab: Tab? // Add this binding
+    @Binding var isDragging: Bool
+    
     // Track the previous space to determine slide direction
     @State private var previousSpaceIndex: Int = 0
     @State private var slideDirection: SlideDirection = .none
     @State private var isSpaceHeaderHovered: Bool = false
     
     // Enhanced drag and drop state
-    @State private var draggedTab: Tab?
     @State private var dragOffset: CGSize = .zero
     @State private var draggedTabIndex: Int?
-    @State private var isDragging: Bool = false
     @State private var dropZoneHighlight: UUID?
     @State private var dragInsertionIndex: Int?
     @State private var dragInsertionPosition: CGFloat = 0
@@ -55,15 +56,24 @@ struct TabsSection: View {
         }
         .onChange(of: viewModel.currentTab) { _, newValue in
             if newValue?.url != nil {
+                viewModel.tappedTab = newValue
                 viewModel.addressBarVM.isShowingEnterAddressPopup = false
             }
         }
         .onChange(of: isDragging) { _, dragging in
             if !dragging {
                 // Clean up drag state when dragging ends
-                withAnimation(.easeOut(duration: 0.2)) {
-                    dropZoneHighlight = nil
-                    dragInsertionIndex = nil
+                cleanupDragState()
+            }
+        }
+        // Add a timer-based cleanup as a fallback
+        .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
+            // If we have a dragged tab but no active drag operation, clean up
+            if draggedTab != nil && !isDragging {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if draggedTab != nil && !isDragging {
+                        cleanupDragState()
+                    }
                 }
             }
         }
@@ -173,6 +183,7 @@ struct TabsSection: View {
                                     isDropTarget: dropZoneHighlight == tab.id,
                                     isAboveDropTarget: dragInsertionIndex == index
                                 ))
+
                                 .onDrag {
                                     startDrag(tab: tab, index: index)
                                     return NSItemProvider(object: tab.id.uuidString as NSString)
@@ -190,7 +201,8 @@ struct TabsSection: View {
                                         isDragging: $isDragging,
                                         isPinned: true,
                                         viewModel: viewModel,
-                                        scrollProxy: proxy
+                                        scrollProxy: proxy,
+                                        onCleanup: cleanupDragState
                                     )
                                 )
                                 
@@ -254,6 +266,7 @@ struct TabsSection: View {
                             isDropTarget: dropZoneHighlight == tab.id,
                             isAboveDropTarget: dragInsertionIndex == index
                         ))
+
                         .onDrag {
                             startDrag(tab: tab, index: index)
                             return NSItemProvider(object: tab.id.uuidString as NSString)
@@ -271,7 +284,8 @@ struct TabsSection: View {
                                 isDragging: $isDragging,
                                 isPinned: false,
                                 viewModel: viewModel,
-                                scrollProxy: proxy
+                                scrollProxy: proxy,
+                                onCleanup: cleanupDragState
                             )
                         )
                         
@@ -297,6 +311,25 @@ struct TabsSection: View {
             draggedTab = tab
             draggedTabIndex = index
             isDragging = true
+        }
+        
+        // Set a fallback timer to clean up if drag doesn't complete properly
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if draggedTab?.id == tab.id && isDragging {
+                cleanupDragState()
+            }
+        }
+    }
+    
+    // NEW: Centralized cleanup function
+    private func cleanupDragState() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            draggedTab = nil
+            draggedTabIndex = nil
+            dropZoneHighlight = nil
+            dragInsertionIndex = nil
+            isDragging = false
+            dragOffset = .zero
         }
     }
     
@@ -364,23 +397,24 @@ struct EnhancedTabDropDelegate: DropDelegate {
     let isPinned: Bool
     let viewModel: BrowserViewModel
     let scrollProxy: ScrollViewProxy
+    let onCleanup: () -> Void // NEW: Cleanup callback
     
     func performDrop(info: DropInfo) -> Bool {
         guard let draggedTab = draggedTab,
               let draggedIndex = draggedTabIndex else {
-            cleanup()
+            onCleanup()
             return false
         }
         
         // Don't drop on the same tab
         if draggedTab.id == tab.id {
-            cleanup()
+            onCleanup()
             return false
         }
         
         // Only allow reordering within the same section (pinned/regular)
         if draggedTab.isPinned != isPinned {
-            cleanup()
+            onCleanup()
             return false
         }
         
@@ -392,7 +426,7 @@ struct EnhancedTabDropDelegate: DropDelegate {
             viewModel.reorderTab(draggedTab, to: targetIndex, isPinned: isPinned)
         }
         
-        cleanup()
+        onCleanup()
         return true
     }
     
@@ -456,16 +490,6 @@ struct EnhancedTabDropDelegate: DropDelegate {
         }
         
         return DropProposal(operation: .forbidden)
-    }
-    
-    private func cleanup() {
-        withAnimation(.easeOut(duration: 0.2)) {
-            draggedTab = nil
-            draggedTabIndex = nil
-            dropZoneHighlight = nil
-            dragInsertionIndex = nil
-            isDragging = false
-        }
     }
 }
 
