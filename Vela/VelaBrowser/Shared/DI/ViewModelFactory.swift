@@ -10,7 +10,8 @@ class ViewModelFactory: ObservableObject {
     private var _bookmarkViewModel: BookmarkViewModel?
     private var _velaPilotViewModel: VelaPilotViewModel?
     private var _noteboardVM: NoteBoardViewModel?
-    private var _suggestionViewModel: SuggestionViewModel?
+    private var _suggestionViewModel: AddressBarViewModel?
+    private var _schemaDetection: SchemaDetectionService?
    // private var _downloadViewModel: DownloadViewModel?
     
     init(container: DIContainer = .shared) {
@@ -23,7 +24,7 @@ class ViewModelFactory: ObservableObject {
             return existing
         }
         
-        let viewModel = container.makeBrowserViewModel(with: noteBoardViewModel, with: suggestionViewModel)
+        let viewModel = container.makeBrowserViewModel(with: noteBoardViewModel, with: suggestionViewModel, with: schemaDector)
         _browserViewModel = viewModel
         return viewModel
     }
@@ -47,13 +48,22 @@ class ViewModelFactory: ObservableObject {
         _noteboardVM = viewModel
         return viewModel
     }
-    var suggestionViewModel: SuggestionViewModel{
+    var suggestionViewModel: AddressBarViewModel{
         if let existing = _suggestionViewModel {
             return existing
         }
         
-        let viewModel = container.makeSuggestionViewModel()
+        let viewModel = container.makeAddressBarViewModel()
         _suggestionViewModel = viewModel
+        return viewModel
+    }
+    var schemaDector: SchemaDetectionService{
+        if let existing = _schemaDetection {
+            return existing
+        }
+        
+        let viewModel = container.makeSchemaDetector()
+        _schemaDetection = viewModel
         return viewModel
     }
     
@@ -81,8 +91,8 @@ class ViewModelFactory: ObservableObject {
 //    }
     
     // MARK: - New Instance ViewModels
-    func makeSuggestionViewModel() -> SuggestionViewModel {
-        return container.makeSuggestionViewModel()
+    func makeaddressBarViewModel() -> AddressBarViewModel {
+        return container.makeAddressBarViewModel()
     }
     func makeNoteBoardViewMode()-> NoteBoardViewModel{
         return container.makeNoteBoardViewModel()

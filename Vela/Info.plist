@@ -2,35 +2,36 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>HTML document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.html</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Web URLs</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>http</string>
+				<string>https</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
-	<key>CFBundleURLTypes</key>
-<array>
-  <dict>
-    <key>CFBundleURLName</key>
-    <string>Web URLs</string>
-    <key>CFBundleURLSchemes</key>
-    <array>
-      <string>http</string>
-      <string>https</string>
-    </array>
-  </dict>
-</array>
-<key>CFBundleDocumentTypes</key>
-<array>
-  <dict>
-    <key>CFBundleTypeName</key>
-    <string>HTML document</string>
-    <key>CFBundleTypeRole</key>
-    <string>Viewer</string>
-    <key>LSItemContentTypes</key>
-    <array>
-      <string>public.html</string>
-    </array>
-  </dict>
-</array>
-
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
 </dict>
 </plist>

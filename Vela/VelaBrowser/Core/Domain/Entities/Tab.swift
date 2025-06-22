@@ -11,15 +11,19 @@ class Tab: Identifiable, Equatable, ObservableObject {
     @Published var canGoBack: Bool = false
     @Published var canGoForward: Bool = false
     @Published var isPlayingAudio: Bool = false
+    
     var spaceId: UUID?
     let createdAt: Date
     @Published var lastAccessedAt: Date
     @Published var isPinned: Bool = false
     @Published var position: Int = 0
-
+    @Published var folderId: UUID?
     @Published var scrollPosition: Double = 0
     @Published var zoomLevel: CGFloat = 1.0 // Default zoom level (100%)
     @Published var isZooming: Bool = false
+    @Published var errorMessage: String?
+    @Published var hasLoadFailed = false
+    @Published var lastLoadError: Error?
     private var zoomIndicatorTimer: Timer?
 
     // Minimum and maximum zoom levels
@@ -50,7 +54,8 @@ class Tab: Identifiable, Equatable, ObservableObject {
         createdAt: Date = Date(),
         lastAccessedAt: Date = Date(),
         isPinned: Bool = false,
-        position: Int = 0
+        position: Int = 0,
+        folderId: UUID?
     ) {
         self.id = id
         self.title = title
@@ -64,6 +69,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
         self.lastAccessedAt = lastAccessedAt
         self.isPinned = isPinned
         self.position = position
+        self.folderId = folderId
         
         setupFaviconObserver()
     }
@@ -88,7 +94,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
     private var faviconLoadQueue: [(URL, Int)] = [] // (URL, retryCount)
     private let maxFaviconRetries = 3
     private var currentFaviconTask: AnyCancellable?
-    private var isLoadingFavicon = false
+    var isLoadingFavicon = false
 
     func loadFavicon(for url: URL) {
         // Prevent multiple simultaneous favicon loads
@@ -384,11 +390,11 @@ class Tab: Identifiable, Equatable, ObservableObject {
     // MARK: - Native Media Observers
     private func setupNativeMediaObservers() {
 //        guard let webView = webView else { return }
-//        
+//
 //        // Clean up existing observers
 //        mediaPlaybackObserver?.invalidate()
 //        hasMediaObserver?.invalidate()
-//        
+//
 //        // Observe hasOnlySecureContent (can indicate media activity)
 //        if #available(macOS 12.0, *) {
 //            hasMediaObserver = webView.observe(\.hasOnlySecureContent, options: [.new, .old]) { [weak self] webView, change in
@@ -397,7 +403,7 @@ class Tab: Identifiable, Equatable, ObservableObject {
 //                }
 //            }
 //        }
-//        
+//
 //        print("🔧 Native media observers setup for: \(title)")
     }
     

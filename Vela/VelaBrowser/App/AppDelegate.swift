@@ -98,7 +98,7 @@ class VelaAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     
     // MARK: - Menu Actions
     @MainActor @objc func newTab(_ sender: Any?) {
-        browserViewModel?.createNewTab(shouldReloadTabs: true)
+        browserViewModel?.startCreatingNewTab()
     }
     
     @MainActor @objc func newTabInBackground(_ sender: Any?) {

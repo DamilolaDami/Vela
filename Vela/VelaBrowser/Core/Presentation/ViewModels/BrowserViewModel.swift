@@ -27,10 +27,18 @@ class BrowserViewModel: ObservableObject {
     @Published var isIncognitoMode: Bool = false
     @Published var showCommandPalette = false
     @Published var noteboardVM: NoteBoardViewModel
-    @Published var suggestionVM: SuggestionViewModel
+    @Published var addressBarVM: AddressBarViewModel
+    @Published var detectedSechema: SchemaDetectionService
     @Published var previousSpace: Space?
     @Published var isInBoardMode: Bool = false
-
+    @Published var folders: [Folder] = []
+    @Published var tappedTab: Tab?
+    @Published var downloadsManager: DownloadsManager?
+    @Published var siteSettingsViewModel: SiteSettingsViewModel
+    @Published var isShowingImportFromOtherBrowserSheet: Bool = false
+    @Published var showSettings = false
+    private var observers: [NSObjectProtocol] = []
+     
     private var popupWindows: [WKWebView: NSWindow] = [:]
     
     // Cache to track loaded tabs for each space
@@ -42,6 +50,7 @@ class BrowserViewModel: ObservableObject {
     private let createTabUseCase: CreateTabUseCaseProtocol
     private let tabRepository: TabRepositoryProtocol
     private let spaceRepository: SpaceRepositoryProtocol
+    private var folderRepository: FolderRepositoryProtocol
     private var cancellables = Set<AnyCancellable>()
     
     private enum UserDefaultsKeys {
@@ -52,20 +61,30 @@ class BrowserViewModel: ObservableObject {
         currentSpace?.color.color ??  Color(NSColor.tertiarySystemFill)
     }
     
+
+    
     init(
         createTabUseCase: CreateTabUseCaseProtocol,
         tabRepository: TabRepositoryProtocol,
         spaceRepository: SpaceRepositoryProtocol,
+        folderRepository: FolderRepositoryProtocol,
         noteboardVM: NoteBoardViewModel,
-        suggestionVM: SuggestionViewModel
+        addressBarVM: AddressBarViewModel,
+        detectedSechema: SchemaDetectionService
     ) {
         self.createTabUseCase = createTabUseCase
         self.tabRepository = tabRepository
         self.spaceRepository = spaceRepository
+        self.folderRepository = folderRepository
         self.noteboardVM = noteboardVM
-        self.suggestionVM = suggestionVM
+        self.addressBarVM = addressBarVM
+        self.detectedSechema = detectedSechema
+        self.downloadsManager = DownloadsManager()
+        self.siteSettingsViewModel = SiteSettingsViewModel(siteUrl: URL(string: "about:blank")!)
         setupInitialState()
         setupBindings()
+        setupFolderBindings()
+        setupErrorNotifications()
     }
     
     private func setupInitialState() {
@@ -128,6 +147,16 @@ class BrowserViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
+    private func setupFolderBindings() {
+         $currentSpace
+             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+             .sink { [weak self] space in
+                 guard let self = self, !self.isInBoardMode else { return }
+                 self.loadFoldersForCurrentSpace()
+             }
+             .store(in: &cancellables)
+     }
+     
     // MARK: - Space Management
     
     func createSpace(_ space: Space) {
@@ -249,16 +278,21 @@ class BrowserViewModel: ObservableObject {
             )
             .store(in: &cancellables)
     }
+    func startCreatingNewTab(){
+        self.addressText = ""
+        self.tappedTab = nil
+        self.addressBarVM.isShowingEnterAddressPopup = true
+    }
     
     // MARK: - Tab Management
-    func createNewTab(with url: URL? = nil, inBackground: Bool = false, shouldReloadTabs: Bool = false, focusAddressBar: Bool = true) {
+    func createNewTab(with url: URL? = nil, inBackground: Bool = false, shouldReloadTabs: Bool = false, focusAddressBar: Bool = true, folderId: UUID? = nil) {
         let previousTab = currentTab
         
         if !inBackground {
             self.currentTab = nil
         }
         
-        createTabUseCase.execute(url: url, in: currentSpace?.id)
+        createTabUseCase.execute(url: url, in: currentSpace?.id, folderId: folderId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -283,6 +317,7 @@ class BrowserViewModel: ObservableObject {
                     if !inBackground && focusAddressBar {
                         self.addressText = ""
                         self.isEditing = true
+                        self.addressBarVM.isShowingEnterAddressPopup = true
                     }
                 }
             )
@@ -296,7 +331,7 @@ class BrowserViewModel: ObservableObject {
         configuration.preferences.isFraudulentWebsiteWarningEnabled = false
         configuration.applicationNameForUserAgent = "Safari/605.1.15"
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = CustomWKWebView(frame: .zero, configuration: configuration)
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
         // Set up the webView fully before any operations
@@ -351,30 +386,35 @@ class BrowserViewModel: ObservableObject {
     }
     
     func selectTab(_ tab: Tab) {
+        // Stop loading the current tab
         currentTab?.isLoading = false
-        
+        addressBarVM.isShowingEnterAddressPopup = false
+
         // Exit board mode when selecting a tab
         if isInBoardMode {
             exitBoardMode()
         }
-        
+
+        // Ensure the tab has a valid webView
         if tab.webView == nil {
-            let configuration = WKWebViewConfiguration()
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-            configuration.preferences.isFraudulentWebsiteWarningEnabled = false
-            configuration.applicationNameForUserAgent = "Safari/605.1.15"
-            tab.webView = WKWebView(frame: .zero, configuration: configuration)
-            tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-            if let url = tab.url {
-                tab.webView?.load(URLRequest(url: url))
+            configureWebViewForTab(tab)
+        } else if let webView = tab.webView, let url = tab.url, webView.url != url {
+            // Only load the URL if it differs from the current webView URL
+            webView.load(URLRequest(url: url))
+            // Delay favicon loading to ensure webView is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                tab.reloadFavicon()
             }
         }
+
         print("Selecting tab: \(tab.url?.absoluteString ?? "nil")")
         currentTab = tab
+        tappedTab = tab
         addressText = tab.url?.absoluteString ?? ""
+        if tab.url == nil {
+            addressBarVM.isShowingEnterAddressPopup = true
+        }
     }
-    
     func selectTabAtIndex(_ index: Int) {
         guard index >= 0 && index < tabs.count else { return }
         selectTab(tabs[index])
@@ -783,34 +823,59 @@ class BrowserViewModel: ObservableObject {
         }
     }
     
-    func navigateToURL() {
-        
-        guard !addressText.isEmpty else { return }
+    func getUrl(_ url: String?) -> URL? {
+             let inputText = url ?? addressText 
 
+            isLoading = true
+            let urlPattern = "^(https?\\:\\/\\/)?([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(\\/.*)?$"
+            let isURL = inputText.range(of: urlPattern, options: .regularExpression) != nil
+
+            var resultURL: URL?
+            if isURL {
+                let urlString = inputText.hasPrefix("http") ? inputText : "https://\(inputText)"
+                resultURL = URL(string: urlString)
+            } else {
+                let query = inputText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? inputText
+                let searchURLString = "https://www.google.com/search?q=\(query)"
+                resultURL = URL(string: searchURLString)
+            }
+            
+            return resultURL
+        }
+    
+    func navigateToURL(_ urlString: String?) {
         isLoading = true
+        
+        guard let urlString = urlString, !urlString.isEmpty else {
+            isLoading = false
+            return
+        }
+        
         let urlPattern = "^(https?\\:\\/\\/)?([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(\\/.*)?$"
-        let isURL = addressText.range(of: urlPattern, options: .regularExpression) != nil
-
+        let isURL = urlString.range(of: urlPattern, options: .regularExpression) != nil
+        
         var url: URL?
         if isURL {
-            let urlString = addressText.hasPrefix("http") ? addressText : "https://\(addressText)"
-            url = URL(string: urlString)
+            let finalURLString = urlString.hasPrefix("http") ? urlString : "https://\(urlString)"
+            url = URL(string: finalURLString)
         } else {
-            let query = addressText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? addressText
+            let query = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? urlString
             let searchURLString = "https://www.google.com/search?q=\(query)"
             url = URL(string: searchURLString)
         }
-
+        
         if let url = url {
-            if let tab = currentTab, let webView = tab.webView {
+            if let tab = tappedTab {
+                tab.errorMessage = nil
+                tab.hasLoadFailed = false
                 tab.url = url
-                tab.title = addressText
-                webView.load(URLRequest(url: url))
+                tab.title = urlString
+                tab.webView?.load(URLRequest(url: url))
             } else {
-                createNewTab(with: url)
+                createNewTab(with: url, inBackground: false, shouldReloadTabs: false, focusAddressBar: false, folderId: nil)
             }
         }
-
+        
         isEditing = false
         isLoading = false
     }
@@ -827,9 +892,13 @@ class BrowserViewModel: ObservableObject {
         // Check if tabs are already loaded for this space and we're not forcing a reload
         if !forceReload && spaceTabsLoaded.contains(spaceId), let cachedTabs = spaceTabsCache[spaceId] {
             print("Loading cached tabs for space \(spaceId): \(cachedTabs.count) tabs")
-            tabs = cachedTabs
+            // **IMPORTANT**: Sort tabs by position when loading from cache
+            tabs = cachedTabs.sorted { $0.position < $1.position }
             currentTab = tabs.first
-            
+            tappedTab = tabs.first
+            if currentTab?.url == nil {
+                addressBarVM.isShowingEnterAddressPopup = true
+            }
             // Ensure WebViews are still properly configured
             tabs.forEach { tab in
                 if tab.webView == nil {
@@ -854,15 +923,18 @@ class BrowserViewModel: ObservableObject {
                 receiveValue: { [weak self] tabs in
                     guard let self = self else { return }
                     print("Loaded \(tabs.count) tabs for space \(spaceId)")
-                    self.tabs = tabs
-                    self.currentTab = tabs.first
-                    
+                    // **IMPORTANT**: Sort tabs by position when loading from repository
+                    self.tabs = tabs.sorted { $0.position < $1.position }
+                    self.currentTab = self.tabs.first
+                    if currentTab?.url == nil {
+                        addressBarVM.isShowingEnterAddressPopup = true
+                    }
                     // Cache the loaded tabs
-                    self.spaceTabsCache[spaceId] = tabs
+                    self.spaceTabsCache[spaceId] = self.tabs
                     self.spaceTabsLoaded.insert(spaceId)
                     
                     // Configure web views for all tabs
-                    tabs.forEach { tab in
+                    self.tabs.forEach { tab in
                         if tab.webView == nil {
                             self.configureWebViewForTab(tab)
                         }
@@ -879,7 +951,7 @@ class BrowserViewModel: ObservableObject {
         configuration.preferences.isFraudulentWebsiteWarningEnabled = false
         configuration.applicationNameForUserAgent = "Safari/605.1.15"
         
-        tab.webView = WKWebView(frame: .zero, configuration: configuration)
+        tab.webView = CustomWKWebView(frame: .zero, configuration: configuration)
         tab.webView?.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
         
         if let url = tab.url {
@@ -1050,6 +1122,393 @@ class BrowserViewModel: ObservableObject {
             popupWindows.removeAll()
             print("🪟 All popup windows closed")
         }
+
+    private func normalizeTabPositions(isPinned: Bool) {
+        let tabsToNormalize = tabs.filter { $0.isPinned == isPinned }
+            .sorted { $0.position < $1.position }
+        
+        for (index, tab) in tabsToNormalize.enumerated() {
+            tab.position = index
+        }
+    }
+    
+    // **NEW METHOD**: Save tab positions to repository
+    private func saveTabPositions(isPinned: Bool) {
+        let tabsToSave = tabs.filter { $0.isPinned == isPinned }
+        
+        for tab in tabsToSave {
+            tabRepository.update(tab: tab)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to update tab position for \(tab.id): \(error)")
+                        }
+                    },
+                    receiveValue: { _ in
+                        print("Successfully updated position for tab \(tab.id): \(tab.position)")
+                    }
+                )
+                .store(in: &cancellables)
+        }
+    }
+    
+    func createNewTabWithPosition(url: URL? = nil, inBackground: Bool = false, folderId: UUID? = nil) -> Tab? {
+        // Create the tab synchronously first
+        let newTab = Tab(
+            id: UUID(),
+            title: url?.host ?? "New Tab", url: url,
+            spaceId: currentSpace?.id, isPinned: false,
+            position: getNextTabPosition(isPinned: false),
+            folderId: nil
+        )
+        
+        // Add to tabs array immediately
+        tabs.append(newTab)
+        
+        // Set as current tab if not in background
+        if !inBackground {
+            currentTab = newTab
+            self.addressBarVM.isShowingEnterAddressPopup = true
+        }
+        
+        // Update cache for current space
+        if let spaceId = currentSpace?.id {
+            spaceTabsCache[spaceId] = tabs
+            spaceTabsLoaded.insert(spaceId)
+        }
+        
+        // Save to persistent storage asynchronously
+        createTabUseCase.execute(url: url, in: currentSpace?.id, folderId: folderId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to persist tab: \(error)")
+                        // Handle error - maybe remove from tabs array if persistence fails
+                    }
+                },
+                receiveValue: { [weak self] persistedTab in
+                    guard let self = self else { return }
+                    // Update the temporary tab with the persisted one
+                    if let index = self.tabs.firstIndex(where: { $0.id == newTab.id }) {
+                        self.tabs[index] = persistedTab
+                    }
+                }
+            )
+            .store(in: &cancellables)
+        
+        return newTab
+    }
+    
+    /// Gets the next available position for a tab
+    private func getNextTabPosition(isPinned: Bool) -> Int {
+        if isPinned {
+            let maxPinnedPosition = tabs.filter { $0.isPinned }.map { $0.position }.max() ?? -1
+            return maxPinnedPosition + 1
+        } else {
+            let maxRegularPosition = tabs.filter { !$0.isPinned }.map { $0.position }.max() ?? -1
+            return maxRegularPosition + 1
+        }
+    }
+    
+    /// Reorders a tab to a new position
+    func reorderTab(_ tab: Tab, to targetIndex: Int, isPinned: Bool) {
+        guard let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        
+        // Get the relevant tabs (pinned or regular)
+        let relevantTabs = tabs.filter { $0.isPinned == isPinned }.sorted { $0.position < $1.position }
+        
+        // Ensure target index is valid
+        let clampedTargetIndex = max(0, min(targetIndex, relevantTabs.count - 1))
+        
+        // Remove the tab from its current position
+        tabs.removeAll { $0.id == tab.id }
+        
+        // Update the tab's position and pinned status
+        var updatedTab = tab
+        updatedTab.isPinned = isPinned
+        
+        // Recalculate positions for all tabs in the section
+        var updatedTabs = relevantTabs.filter { $0.id != tab.id }
+        updatedTabs.insert(updatedTab, at: clampedTargetIndex)
+        
+        // Update positions
+        for (index, var tab) in updatedTabs.enumerated() {
+            tab.position = index
+            if let tabIndex = tabs.firstIndex(where: { $0.id == tab.id }) {
+                tabs[tabIndex] = tab
+            } else {
+                tabs.append(tab)
+            }
+        }
+        
+        // Sort tabs to maintain order
+        tabs.sort { $0.position < $1.position }
+        
+        // Update cache
+        if let spaceId = currentSpace?.id {
+            spaceTabsCache[spaceId] = tabs
+        }
+        
+        // Persist changes
+        persistTabOrder()
+    }
+    
+    /// Persists the current tab order to storage
+    private func persistTabOrder() {
+        // Save all tab positions
+        for tab in tabs {
+            updateTab(tab)
+        }
+    }
+    
+    /// Toggles a tab's pinned status
+    func toggleTabPinned(_ tab: Tab) {
+        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        
+        var updatedTab = tab
+        updatedTab.isPinned = !tab.isPinned
+        
+        // Update position based on new pinned status
+        updatedTab.position = getNextTabPosition(isPinned: updatedTab.isPinned)
+        
+        tabs[index] = updatedTab
+        
+        // Reorder tabs to maintain proper positioning
+        reorderTabsAfterPinToggle()
+        
+        // Update cache
+        if let spaceId = currentSpace?.id {
+            spaceTabsCache[spaceId] = tabs
+        }
+        
+        // Persist the change
+        updateTab(updatedTab)
+    }
+    
+    /// Reorders tabs after a pin status change
+    private func reorderTabsAfterPinToggle() {
+        // Separate pinned and regular tabs
+        var pinnedTabs = tabs.filter { $0.isPinned }.sorted { $0.position < $1.position }
+        var regularTabs = tabs.filter { !$0.isPinned }.sorted { $0.position < $1.position }
+        
+        // Reassign positions
+        for (index, var tab) in pinnedTabs.enumerated() {
+            tab.position = index
+            pinnedTabs[index] = tab
+        }
+        
+        for (index, var tab) in regularTabs.enumerated() {
+            tab.position = index
+            regularTabs[index] = tab
+        }
+        
+        // Update the main tabs array
+        tabs = pinnedTabs + regularTabs
+    }
+    
+    // MARK: - Folder Management
+        func createFolder(name: String) {
+            guard let spaceId = currentSpace?.id else { return }
+            let folder = Folder(name: name, spaceId: spaceId, position: folders.count)
+            
+            folderRepository.create(folder: folder)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to create folder: \(error)")
+                        } else {
+                            self?.loadFoldersForCurrentSpace()
+                        }
+                    },
+                    receiveValue: { [weak self] newFolder in
+                        self?.folders.append(newFolder)
+                    }
+                )
+                .store(in: &cancellables)
+        }
+        
+        func updateFolder(_ folder: Folder) {
+            folderRepository.update(folder: folder)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to update folder: \(error)")
+                        }
+                    },
+                    receiveValue: { [weak self] updatedFolder in
+                        if let index = self?.folders.firstIndex(where: { $0.id == updatedFolder.id }) {
+                            self?.folders[index] = updatedFolder
+                        }
+                    }
+                )
+                .store(in: &cancellables)
+        }
+        
+        func deleteFolder(_ folder: Folder) {
+            folderRepository.delete(folderId: folder.id)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to delete folder: \(error)")
+                        } else {
+                            self?.folders.removeAll { $0.id == folder.id }
+                        }
+                    },
+                    receiveValue: { }
+                )
+                .store(in: &cancellables)
+        }
+        
+        func addTab(_ tab: Tab, to folder: Folder) {
+            var updatedFolder = folder
+            updatedFolder.tabs.append(tab)
+            updatedFolder.updatedAt = Date()
+            
+            // Update the tab's spaceId to match the folder's spaceId
+            let updatedTab = tab
+            updatedTab.spaceId = folder.spaceId
+            updatedTab.folderId = folder.id
+            // Update both tab and folder
+            Publishers.CombineLatest(
+                tabRepository.update(tab: updatedTab),
+                folderRepository.update(folder: updatedFolder)
+            )
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to add tab to folder: \(error)")
+                    } else {
+                        self?.loadTabsForCurrentSpace()
+                        self?.loadFoldersForCurrentSpace()
+                    }
+                },
+                receiveValue: { [weak self] updatedTab, updatedFolder in
+                    if let folderIndex = self?.folders.firstIndex(where: { $0.id == folder.id }) {
+                        self?.folders[folderIndex] = updatedFolder
+                    }
+                    if let tabIndex = self?.tabs.firstIndex(where: { $0.id == tab.id }) {
+                        self?.tabs[tabIndex] = updatedTab
+                    }
+                }
+            )
+            .store(in: &cancellables)
+        }
+        
+    func removeTab(_ tab: Tab, from folder: Folder) {
+        // Update the folder by removing the tab
+        var updatedFolder = folder
+        updatedFolder.tabs.removeAll { $0.id == tab.id }
+        updatedFolder.updatedAt = Date()
+        
+        // Update the tab by clearing its folderId
+        let updatedTab = tab
+        updatedTab.folderId = nil
+        
+        // Ensure the tab is added back to the main tabs list if not already present
+        if !tabs.contains(where: { $0.id == tab.id }) {
+            updatedTab.position = getNextTabPosition(isPinned: updatedTab.isPinned)
+            tabs.append(updatedTab)
+        } else if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
+            tabs[index] = updatedTab
+        }
+        
+        // Update both tab and folder in the repository
+        Publishers.CombineLatest(
+            tabRepository.update(tab: updatedTab),
+            folderRepository.update(folder: updatedFolder)
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                if case .failure(let error) = completion {
+                    print("Failed to remove tab from folder: \(error)")
+                } else {
+                    // Reload both tabs and folders to ensure UI reflects changes
+                    self?.loadTabsForCurrentSpace()
+                    self?.loadFoldersForCurrentSpace()
+                }
+            },
+            receiveValue: { [weak self] updatedTab, updatedFolder in
+                guard let self = self else { return }
+                // Update folder in folders array
+                if let folderIndex = self.folders.firstIndex(where: { $0.id == folder.id }) {
+                    self.folders[folderIndex] = updatedFolder
+                }
+                // Update tab in tabs array
+                if let tabIndex = self.tabs.firstIndex(where: { $0.id == updatedTab.id }) {
+                    self.tabs[tabIndex] = updatedTab
+                }
+                // Update currentTab if it was the affected tab
+                if self.currentTab?.id == updatedTab.id {
+                    self.currentTab = updatedTab
+                }
+            }
+        )
+        .store(in: &cancellables)
+    }
+        
+        private func loadFoldersForCurrentSpace() {
+            guard let spaceId = currentSpace?.id else {
+                folders = []
+                return
+            }
+            
+            folderRepository.getBySpace(spaceId: spaceId)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] completion in
+                        if case .failure(let error) = completion {
+                            print("Failed to load folders for space \(spaceId): \(error)")
+                            self?.folders = []
+                        }
+                    },
+                    receiveValue: { [weak self] folders in
+                        self?.folders = folders.sorted { $0.position < $1.position }
+                    }
+                )
+                .store(in: &cancellables)
+        }
+    private func setupErrorNotifications() {
+        let observer1 = NotificationCenter.default.addObserver(
+                   forName: .tabShouldShowErrorPage,
+                   object: nil,
+                   queue: .main
+        ) { [weak self] notification in
+            self?.handleShowErrorPage(notification)
+        }
+        observers.append(observer1)
+        
+        // Handle other notifications similarly...
+    }
+    
+    private func handleShowErrorPage(_ notification: Notification) {
+         guard let tabId = notification.object as? UUID,
+               let tab = tabs.first(where: { $0.id == tabId }) else { return }
+         
+         tab.hasLoadFailed = true
+         tab.isLoading = false
+         
+         if let errorMessage = notification.userInfo?["errorMessage"] as? String {
+             tab.errorMessage = errorMessage
+         }
+     }
+     
+    func removeErrorNotifications(){
+        observers.forEach { observer in
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    deinit {
+        observers.forEach { observer in
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 }
 
 

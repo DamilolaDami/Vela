@@ -4,7 +4,7 @@ import WebKit
 struct WebViewContainer: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var noteBoardViewModel: NoteBoardViewModel
-    @ObservedObject var suggestionViewModel: SuggestionViewModel
+    @ObservedObject var suggestionViewModel: AddressBarViewModel
     @State private var hasInitialLoad = false
 
     var body: some View {
@@ -41,14 +41,14 @@ struct WebViewContainer: View {
                 hasInitialLoad = true
             }
         }
-        .onChange(of: viewModel.currentTab?.id) { oldId, newId in
-          
-            hasInitialLoad = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                loadInitialURL()
-                hasInitialLoad = true
-            }
-        }
+//        .onChange(of: viewModel.currentTab?.id) { oldId, newId in
+//          
+//            hasInitialLoad = false
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+//                loadInitialURL()
+//                hasInitialLoad = true
+//            }
+//        }
     }
 
     private func loadInitialURL() {
@@ -70,45 +70,3 @@ struct WebViewContainer: View {
 
 import WebKit
 
-class AudioObservingWebView: WKWebView {
-    @objc dynamic var isPlayingAudioPrivate: Bool = false
-
-    override func didChangeValue(forKey key: String) {
-        super.didChangeValue(forKey: key)
-
-        if key == "_isPlayingAudio" {
-            if let value = try? self.value(forKey: "_isPlayingAudio") as? Bool {
-                isPlayingAudioPrivate = value
-            
-            }
-        }
-    }
-    override func observeValue(
-        forKeyPath keyPath: String?,
-        of object: Any?,
-        change: [NSKeyValueChangeKey : Any]?,
-        context: UnsafeMutableRawPointer?
-    ) {
-        if keyPath == "_isPlayingAudio" {
-            if let value = (change?[.newKey] as? NSNumber)?.boolValue {
-                isPlayingAudioPrivate = value
-              
-            }
-        } else {
-            // Always call super for unhandled keys
-            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
-        }
-    }
-
-    func startObservingAudio() {
-        addObserver(self, forKeyPath: "_isPlayingAudio", options: [.new, .initial], context: nil)
-    }
-
-    func stopObservingAudio() {
-        removeObserver(self, forKeyPath: "_isPlayingAudio")
-    }
-
-    deinit {
-        stopObservingAudio()
-    }
-}

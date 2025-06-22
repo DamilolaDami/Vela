@@ -4,77 +4,50 @@ import SwiftUI
 struct BrowserToolbar: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var bookmarkViewModel: BookmarkViewModel
-    @ObservedObject var suggestionVM: SuggestionViewModel
+    @ObservedObject var suggestionVM: AddressBarViewModel
     var body: some View {
-        HStack(spacing: 12) {
-            // Navigation buttons
-            HStack(spacing: 8) {
-                Button(action: goBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(canGoBack ? .primary : .gray)
-                }
-                .disabled(!canGoBack)
-                .buttonStyle(ArcNavigationButtonStyle(isEnabled: canGoBack))
-                
-                Button(action: goForward) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(canGoForward ? .primary : .gray)
-                }
-                .disabled(!canGoForward)
-                .buttonStyle(ArcNavigationButtonStyle(isEnabled: canGoForward))
-                
-                Button(action: refresh) {
-                    Image(systemName: viewModel.isLoading ? "xmark" : "arrow.clockwise")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.primary)
-                }
-                .buttonStyle(ArcNavigationButtonStyle(isEnabled: true))
-            }
-            
-            // Address bar
+        HStack(spacing: 0) {
+
             AddressBar(
                 text: $viewModel.addressText,
                 isEditing: $viewModel.isEditing,
                 onCommit: {
-                    suggestionVM.cancelSuggestions()
-                    viewModel.navigateToURL()
+                    
                 },
-                currentURL: viewModel.currentTab?.url,
+                currentURL: viewModel.currentTab?.url, viewModel: viewModel,
                 suggestionVM: suggestionVM
             )
+            .onTapGesture {
+                suggestionVM.isShowingEnterAddressPopup = true
+            }
             
             // Action buttons
-            HStack(spacing: 8) {
-                Button(action: copyURL) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.primary)
-                }
-                .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL))
-                .disabled(!hasURL)
-                
-                Button(action: toggleBookmark) {
-                    Image(systemName: isBookmarked ? "heart.fill" : "heart")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(isBookmarked ? .red : .primary)
-                }
-                .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL, isSpecial: isBookmarked))
-                .disabled(!hasURL)
-                
-                Button(action: shareURL) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.primary)
-                }
-                .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL))
-                .disabled(!hasURL)
-            }
+//            HStack(spacing: 8) {
+//                Button(action: copyURL) {
+//                    Image(systemName: "doc.on.doc")
+//                        .font(.system(size: 14, weight: .medium))
+//                        .foregroundColor(.primary)
+//                }
+//                .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL))
+//                .disabled(!hasURL)
+//                
+//                Button(action: toggleBookmark) {
+//                    Image(systemName: isBookmarked ? "heart.fill" : "heart")
+//                        .font(.system(size: 14, weight: .medium))
+//                        .foregroundColor(isBookmarked ? .red : .primary)
+//                }
+//                .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL, isSpecial: isBookmarked))
+             //   .disabled(!hasURL)
+//                
+//                Button(action: shareURL) {
+//                    Image(systemName: "square.and.arrow.up")
+//                        .font(.system(size: 14, weight: .medium))
+//                        .foregroundColor(.primary)
+//                }
+//                .buttonStyle(ArcNavigationButtonStyle(isEnabled: hasURL))
+//                .disabled(!hasURL)
+//            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Rectangle())
         .sheet(isPresented: $bookmarkViewModel.isShowingAddBookmarkSheet) {
             if let url = viewModel.currentTab?.url {
                 AddBookmarkSheet(
@@ -132,18 +105,7 @@ struct BrowserToolbar: View {
         }
     }
     
-    private func copyURL() {
-        guard let url = viewModel.currentTab?.url else { return }
-        
-        #if os(iOS)
-        UIPasteboard.general.string = url.absoluteString
-        #elseif os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-        #endif
-        
-        NotificationService.shared.showSuccess("URL copied")
-    }
+  
     
     private func toggleBookmark() {
         guard let url = viewModel.currentTab?.url else { return }
