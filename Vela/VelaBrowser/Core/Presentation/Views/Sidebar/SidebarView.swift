@@ -12,50 +12,77 @@ struct SidebarView: View {
     @State private var isDragging: Bool = false
     
     var body: some View {
-        Group {
-            VStack(spacing: 0) {
-                SidebarHeader(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel)
+        VStack(spacing: 0) {
+            SidebarHeader(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel)
+            BrowserToolbar(
+                viewModel: viewModel,
+                bookmarkViewModel: bookMarkViewModel,
+                suggestionVM: suggestionViewModel
+            )
+            //.padding(.bottom)
+            .padding(.top, 3)
+            .padding(.horizontal, 10)
+            QuickAccessGrid(viewModel: viewModel)
+                .padding(.bottom)
+                .padding(.top, 6)
+                .padding(.horizontal, 13)
+            List {
+                // Quick Access Section
+               
+                // Note Board Section (commented out)
+//                Section {
+//                    NoteBoardSection(
+//                        boardVM: boardVM,
+//                        viewModel: viewModel,
+//                        onBoardModeSelected: {
+//                            viewModel.currentSpace = nil
+//                        }
+//                    )
+//                    .listRowInsets(EdgeInsets())
+//                    .listRowSeparator(.hidden)
+//                    .listRowBackground(Color.clear)
+//                }
                 
-                ScrollView {
-                    VStack(spacing: 4) {
-                        BrowserToolbar(
-                            viewModel: viewModel,
-                            bookmarkViewModel: bookMarkViewModel,
-                            suggestionVM: suggestionViewModel
-                        )
-                        QuickAccessGrid(viewModel: viewModel)
-//                        NoteBoardSection(
-//                            boardVM: boardVM,
-//                            viewModel: viewModel,
-//                            onBoardModeSelected: {
-//                                viewModel.currentSpace = nil
-//                            }
-//                        )
-                        FolderSection(
-                            viewModel: viewModel,
-                            previewManager: previewManager,
-                            hoveredTab: $hoveredTab,
-                            draggedTab: $draggedTab,
-                            isDragging: $isDragging
-                        )
-                        TabsSection(
-                            viewModel: viewModel,
-                            previewManager: previewManager,
-                            hoveredTab: $hoveredTab,
-                            draggedTab: $draggedTab,
-                            isDragging: $isDragging
-                        )
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.top, 5)
+                // Folder Section
+                Section {
+                    FolderSection(
+                        viewModel: viewModel,
+                        previewManager: previewManager,
+                        hoveredTab: $hoveredTab,
+                        draggedTab: $draggedTab,
+                        isDragging: $isDragging
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    
                 }
                 
-                BottomActions(viewModel: viewModel)
+                // Tabs Section
+                Section {
+                    TabsSection(
+                        viewModel: viewModel,
+                        previewManager: previewManager,
+                        hoveredTab: $hoveredTab,
+                        draggedTab: $draggedTab,
+                        isDragging: $isDragging
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .padding(.vertical)
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .padding(.horizontal, 10)
+            .padding(.top, 5)
             
-            .sheet(isPresented: $viewModel.isShowingCreateSpaceSheet) {
-                SpaceCreationSheet(viewModel: viewModel)
-            }
+            BottomActions(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.isShowingCreateSpaceSheet) {
+            SpaceCreationSheet(viewModel: viewModel)
         }
     }
     

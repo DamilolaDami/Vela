@@ -10,6 +10,9 @@ class CustomWKWebView: WKWebView {
     // Store the URL from the right-click location
     private var rightClickURL: URL?
     
+    // Track observer state to prevent double removal
+    private var isObservingAudio = false
+    
     // Define custom actions
     enum ContextualMenuAction {
         case openInNewTab
@@ -25,10 +28,10 @@ class CustomWKWebView: WKWebView {
         if key == "_isPlayingAudio" {
             if let value = try? self.value(forKey: "_isPlayingAudio") as? Bool {
                 isPlayingAudioPrivate = value
-            
             }
         }
     }
+    
     override func observeValue(
         forKeyPath keyPath: String?,
         of object: Any?,
@@ -38,7 +41,6 @@ class CustomWKWebView: WKWebView {
         if keyPath == "_isPlayingAudio" {
             if let value = (change?[.newKey] as? NSNumber)?.boolValue {
                 isPlayingAudioPrivate = value
-              
             }
         } else {
             // Always call super for unhandled keys
@@ -47,11 +49,27 @@ class CustomWKWebView: WKWebView {
     }
 
     func startObservingAudio() {
-        addObserver(self, forKeyPath: "_isPlayingAudio", options: [.new, .initial], context: nil)
+        guard !isObservingAudio else { return }
+        
+        do {
+            addObserver(self, forKeyPath: "_isPlayingAudio", options: [.new, .initial], context: nil)
+            isObservingAudio = true
+            print("✅ Started observing _isPlayingAudio")
+        } catch {
+            print("❌ Failed to add observer for _isPlayingAudio: \(error)")
+        }
     }
 
     func stopObservingAudio() {
-        removeObserver(self, forKeyPath: "_isPlayingAudio")
+        guard isObservingAudio else { return }
+        
+        do {
+            removeObserver(self, forKeyPath: "_isPlayingAudio")
+            isObservingAudio = false
+            print("✅ Stopped observing _isPlayingAudio")
+        } catch {
+            print("❌ Failed to remove observer for _isPlayingAudio: \(error)")
+        }
     }
 
     deinit {
@@ -210,4 +228,3 @@ class CustomWKWebView: WKWebView {
         }
     }
 }
-

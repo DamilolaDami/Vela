@@ -140,7 +140,7 @@ struct QuickAccessGrid: View {
     var body: some View {
         let currentUrl = viewModel.currentTab?.url
         VStack(alignment: .leading, spacing: 0) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(Self.quickAccessItems, id: \.id) { item in
                     QuickAccessButton(
                         item: item,

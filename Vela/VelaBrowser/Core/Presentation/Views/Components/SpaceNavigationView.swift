@@ -13,7 +13,7 @@ struct SpaceNavigationView: View {
     var body: some View {
         HStack(spacing: 8) {
             // Show up to 3 spaces inline, then overflow indicator
-            ForEach(Array(viewModel.spaces.prefix(3).enumerated()), id: \.element.id) { index, space in
+            ForEach(Array(viewModel.spaces.prefix(2).enumerated()), id: \.element.id) { index, space in
                 SpaceChip(
                     viewModel: viewModel,
                     space: space,
@@ -21,10 +21,10 @@ struct SpaceNavigationView: View {
                 )
             }
             
-            // Overflow indicator if more than 3 spaces
-            if viewModel.spaces.count > 3 {
+            // Overflow indicator if more than 2 spaces
+            if viewModel.spaces.count > 2 {
                 OverflowSpaceButton(
-                    count: viewModel.spaces.count - 3,
+                    count: viewModel.spaces.count - 2,
                     action: { showAllSpaces = true }
                 )
             }

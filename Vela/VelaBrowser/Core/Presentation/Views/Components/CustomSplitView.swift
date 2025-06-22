@@ -193,7 +193,7 @@ struct ConfigurableSplitView<Sidebar: View, Detail: View>: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .focusable(false) // Move this to HStack instead of the whole view
+        .focusable(false)
         .animation(.easeInOut(duration: 0.25), value: columnVisibility)
         .animation(.easeInOut(duration: 0.1), value: isResizing ? nil : sidebarWidth)
     }

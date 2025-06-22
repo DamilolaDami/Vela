@@ -256,8 +256,6 @@ struct FolderRow: View {
                     }
                 }
             }
-            .padding(.top, 4)
-            .padding(.bottom, 8)
         }
     }
     

@@ -180,6 +180,404 @@ struct ImportFromExternalBrowserSheet: View {
     }
 }
 
+//
+//  ImportFromExternalBrowserSheet.swift
+//  Vela
+//
+//  Created by damilola on 6/21/25.
+//
+
+import SwiftUI
+import AppKit
+
+
+// Enhanced BrowserProfile with more metadata
+struct BrowserProfile {
+    let name: String
+    let displayName: String
+    let path: String
+    let lastUsed: String?
+    let avatarIconIndex: Int?
+    let isActive: Bool
+    
+    init(name: String, displayName: String? = nil, path: String, lastUsed: Date? = nil, avatarIconIndex: Int? = nil, isActive: Bool = false) {
+        self.name = name
+        self.path = path
+        self.lastUsed = lastUsed?.timeIntervalSinceNow.formatted()
+        self.avatarIconIndex = avatarIconIndex
+        self.isActive = isActive
+        
+        // Create display name with better logic
+        if let displayName = displayName, !displayName.isEmpty {
+            self.displayName = displayName
+        } else if name.lowercased() == "default" {
+            self.displayName = "Default Profile"
+        } else if name.hasPrefix("Profile ") {
+            let number = String(name.dropFirst(8))
+            self.displayName = "Profile \(number)"
+        } else if name.hasPrefix("Person ") {
+            let number = String(name.dropFirst(7))
+            self.displayName = "Person \(number)"
+        } else {
+            self.displayName = name
+        }
+    }
+}
+
+// Chrome Local State structure for parsing profile info
+struct ChromeLocalState: Codable {
+    let profile: ChromeProfileInfo
+    
+    struct ChromeProfileInfo: Codable {
+        let infoCache: [String: ChromeProfileData]
+        
+        private enum CodingKeys: String, CodingKey {
+            case infoCache = "info_cache"
+        }
+    }
+    
+    struct ChromeProfileData: Codable {
+        let name: String?
+        let shortcutName: String?
+        let avatarIcon: String?
+        let backgroundApps: Bool?
+        let isOmitted: Bool?
+        let isSigninRequired: Bool?
+        let lastActiveTime: String?
+        
+        private enum CodingKeys: String, CodingKey {
+            case name
+            case shortcutName = "shortcut_name"
+            case avatarIcon = "avatar_icon"
+            case backgroundApps = "background_apps"
+            case isOmitted = "is_omitted"
+            case isSigninRequired = "signin_required"
+            case lastActiveTime = "active_time"
+        }
+    }
+}
+
+extension BrowserDetector {
+    
+    private func detectChromeProfiles(homeDir: String) -> [BrowserProfile] {
+        let chromeDir = "\(homeDir)/Library/Application Support/Google/Chrome"
+        return detectChromiumProfilesWithMetadata(baseDir: chromeDir, browserType: .chrome)
+    }
+    
+    private func detectBraveProfiles(homeDir: String) -> [BrowserProfile] {
+        let braveDir = "\(homeDir)/Library/Application Support/BraveSoftware/Brave-Browser"
+        return detectChromiumProfilesWithMetadata(baseDir: braveDir, browserType: .brave)
+    }
+    
+    private func detectEdgeProfiles(homeDir: String) -> [BrowserProfile] {
+        let edgeDir = "\(homeDir)/Library/Application Support/Microsoft Edge"
+        return detectChromiumProfilesWithMetadata(baseDir: edgeDir, browserType: .edge)
+    }
+    
+    private enum ChromiumBrowserType {
+        case chrome, brave, edge, vivaldi, opera
+    }
+    
+    private func detectChromiumProfilesWithMetadata(baseDir: String, browserType: ChromiumBrowserType) -> [BrowserProfile] {
+        var profiles: [BrowserProfile] = []
+        let fileManager = FileManager.default
+        
+        // First, try to read the Local State file for profile metadata
+        let localStatePath = "\(baseDir)/Local State"
+        var profileMetadata: [String: ChromeLocalState.ChromeProfileData] = [:]
+        
+        if fileManager.fileExists(atPath: localStatePath) {
+            do {
+                let data = try Data(contentsOf: URL(fileURLWithPath: localStatePath))
+                let localState = try JSONDecoder().decode(ChromeLocalState.self, from: data)
+                profileMetadata = localState.profile.infoCache
+            } catch {
+                print("Warning: Could not parse Local State file: \(error)")
+                // Continue without metadata
+            }
+        }
+        
+        // Check for default profile
+        let defaultPath = "\(baseDir)/Default"
+        if fileManager.fileExists(atPath: defaultPath) {
+            let metadata = profileMetadata["Default"]
+            let displayName = metadata?.name ?? metadata?.shortcutName
+            let lastActiveTime = parseLastActiveTime(metadata?.lastActiveTime)
+            let avatarIndex = parseAvatarIconIndex(metadata?.avatarIcon)
+            
+            profiles.append(BrowserProfile(
+                name: "Default",
+                displayName: displayName,
+                path: defaultPath,
+                lastUsed: lastActiveTime,
+                avatarIconIndex: avatarIndex,
+                isActive: false
+            ))
+        }
+        
+        // Check for additional profiles
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: baseDir)
+            
+            // Look for Profile directories (Profile 1, Profile 2, etc.)
+            for item in contents {
+                if item.hasPrefix("Profile ") && item != "Profile" {
+                    let profilePath = "\(baseDir)/\(item)"
+                    var isDirectory: ObjCBool = false
+                    
+                    if fileManager.fileExists(atPath: profilePath, isDirectory: &isDirectory) && isDirectory.boolValue {
+                        let metadata = profileMetadata[item]
+                        let displayName = metadata?.name ?? metadata?.shortcutName
+                        let lastActiveTime = parseLastActiveTime(metadata?.lastActiveTime)
+                        let avatarIndex = parseAvatarIconIndex(metadata?.avatarIcon)
+                        
+                        profiles.append(BrowserProfile(
+                            name: item,
+                            displayName: displayName,
+                            path: profilePath,
+                            lastUsed: lastActiveTime,
+                            avatarIconIndex: avatarIndex,
+                            isActive: false
+                        ))
+                    }
+                }
+            }
+            
+            // Also check for Person directories (newer Chrome versions)
+            for item in contents {
+                if item.hasPrefix("Person ") {
+                    let profilePath = "\(baseDir)/\(item)"
+                    var isDirectory: ObjCBool = false
+                    
+                    if fileManager.fileExists(atPath: profilePath, isDirectory: &isDirectory) && isDirectory.boolValue {
+                        let metadata = profileMetadata[item]
+                        let displayName = metadata?.name ?? metadata?.shortcutName
+                        let lastActiveTime = parseLastActiveTime(metadata?.lastActiveTime)
+                        let avatarIndex = parseAvatarIconIndex(metadata?.avatarIcon)
+                        
+                        profiles.append(BrowserProfile(
+                            name: item,
+                            displayName: displayName,
+                            path: profilePath,
+                            lastUsed: lastActiveTime,
+                            avatarIconIndex: avatarIndex,
+                            isActive: false
+                        ))
+                    }
+                }
+            }
+            
+        } catch {
+            print("Error reading Chromium profiles directory: \(error)")
+        }
+        
+        // Sort profiles: Default first, then by name
+        return profiles.sorted { profile1, profile2 in
+            if profile1.name == "Default" { return true }
+            if profile2.name == "Default" { return false }
+            return profile1.displayName < profile2.displayName
+        }
+    }
+    
+    private func parseLastActiveTime(_ timeString: String?) -> Date? {
+        guard let timeString = timeString,
+              let timeInterval = Double(timeString) else { return nil }
+        
+        // Chrome stores time as microseconds since Windows epoch (1601-01-01)
+        // Convert to Unix timestamp
+        let windowsEpochOffset: TimeInterval = 11644473600 // seconds between 1601 and 1970
+        let unixTimestamp = (timeInterval / 1_000_000) - windowsEpochOffset
+        
+        return Date(timeIntervalSince1970: unixTimestamp)
+    }
+    
+    private func parseAvatarIconIndex(_ iconString: String?) -> Int? {
+        guard let iconString = iconString else { return nil }
+        
+        // Chrome avatar icons are stored as "chrome://theme/IDR_PROFILE_AVATAR_X"
+        if let range = iconString.range(of: "IDR_PROFILE_AVATAR_") {
+            let indexString = String(iconString[range.upperBound...])
+            return Int(indexString)
+        }
+        
+        return nil
+    }
+    
+    // Enhanced Firefox profile detection
+    private func detectFirefoxProfiles(homeDir: String) -> [BrowserProfile] {
+        let firefoxProfilesDir = "\(homeDir)/Library/Application Support/Firefox/Profiles"
+        let firefoxInstallsPath = "\(homeDir)/Library/Application Support/Firefox/installs.ini"
+        let firefoxProfilesPath = "\(homeDir)/Library/Application Support/Firefox/profiles.ini"
+        
+        var profiles: [BrowserProfile] = []
+        let fileManager = FileManager.default
+        
+        // Try to read profiles.ini for profile metadata
+        var profileData: [String: String] = [:]
+        if fileManager.fileExists(atPath: firefoxProfilesPath) {
+            profileData = parseFirefoxProfilesIni(path: firefoxProfilesPath)
+        }
+        
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: firefoxProfilesDir)
+            
+            for item in contents {
+                let profilePath = "\(firefoxProfilesDir)/\(item)"
+                var isDirectory: ObjCBool = false
+                
+                if fileManager.fileExists(atPath: profilePath, isDirectory: &isDirectory) && isDirectory.boolValue {
+                    // Firefox profile folder names are usually in format: randomstring.profilename
+                    let components = item.components(separatedBy: ".")
+                    let profileName = components.count > 1 ? components.dropFirst().joined(separator: ".") : item
+                    
+                    // Try to get display name from profiles.ini
+                    let displayName = profileData[item] ?? profileName.capitalized
+                    
+                    // Check when profile was last used by looking at sessionstore files
+                    let lastUsed = getFirefoxProfileLastUsed(profilePath: profilePath)
+                    
+                    profiles.append(BrowserProfile(
+                        name: profileName,
+                        displayName: displayName,
+                        path: profilePath,
+                        lastUsed: lastUsed
+                    ))
+                }
+            }
+        } catch {
+            print("Error reading Firefox profiles: \(error)")
+        }
+        
+        return profiles.sorted { $0.displayName < $1.displayName }
+    }
+    
+    private func parseFirefoxProfilesIni(path: String) -> [String: String] {
+        var profileData: [String: String] = [:]
+        
+        do {
+            let content = try String(contentsOfFile: path)
+            let lines = content.components(separatedBy: .newlines)
+            
+            var currentSection = ""
+            var currentPath = ""
+            var currentName = ""
+            
+            for line in lines {
+                let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+                
+                if trimmedLine.hasPrefix("[") && trimmedLine.hasSuffix("]") {
+                    // Save previous profile if we have both path and name
+                    if !currentPath.isEmpty && !currentName.isEmpty {
+                        profileData[currentPath] = currentName
+                    }
+                    
+                    currentSection = trimmedLine
+                    currentPath = ""
+                    currentName = ""
+                } else if trimmedLine.hasPrefix("Path=") {
+                    currentPath = String(trimmedLine.dropFirst(5))
+                } else if trimmedLine.hasPrefix("Name=") {
+                    currentName = String(trimmedLine.dropFirst(5))
+                }
+            }
+            
+            // Don't forget the last profile
+            if !currentPath.isEmpty && !currentName.isEmpty {
+                profileData[currentPath] = currentName
+            }
+            
+        } catch {
+            print("Error reading Firefox profiles.ini: \(error)")
+        }
+        
+        return profileData
+    }
+    
+    private func getFirefoxProfileLastUsed(profilePath: String) -> Date? {
+        let sessionStorePath = "\(profilePath)/sessionstore.jsonlz4"
+        let sessionStoreBackupPath = "\(profilePath)/sessionstore-backups/recovery.jsonlz4"
+        
+        let fileManager = FileManager.default
+        
+        // Check main sessionstore file first
+        if fileManager.fileExists(atPath: sessionStorePath) {
+            do {
+                let attributes = try fileManager.attributesOfItem(atPath: sessionStorePath)
+                return attributes[.modificationDate] as? Date
+            } catch {
+                print("Error getting sessionstore modification date: \(error)")
+            }
+        }
+        
+        // Check backup sessionstore file
+        if fileManager.fileExists(atPath: sessionStoreBackupPath) {
+            do {
+                let attributes = try fileManager.attributesOfItem(atPath: sessionStoreBackupPath)
+                return attributes[.modificationDate] as? Date
+            } catch {
+                print("Error getting backup sessionstore modification date: \(error)")
+            }
+        }
+        
+        return nil
+    }
+    
+    // Enhanced Arc profile detection
+    private func detectArcProfiles(homeDir: String) -> [BrowserProfile] {
+        // Arc stores profiles in a different structure
+        let arcDir = "\(homeDir)/Library/Application Support/Arc"
+        var profiles: [BrowserProfile] = []
+        let fileManager = FileManager.default
+        
+        // Arc profiles are typically in subdirectories
+        let possiblePaths = [
+            "\(arcDir)/User Data/Default",
+            "\(arcDir)/User Data/Profile 1",
+            "\(arcDir)/User Data/Profile 2"
+        ]
+        
+        for path in possiblePaths {
+            if fileManager.fileExists(atPath: path) {
+                let profileName = URL(fileURLWithPath: path).lastPathComponent
+                let displayName = profileName == "Default" ? "Default Space" : "Space \(profileName.dropFirst(8))"
+                
+                profiles.append(BrowserProfile(
+                    name: profileName,
+                    displayName: displayName,
+                    path: path
+                ))
+            }
+        }
+        
+        return profiles
+    }
+}
+
+// Enhanced TimeInterval extension with better formatting
+extension TimeInterval {
+    func formatted() -> String {
+        let absInterval = abs(self)
+        
+        if absInterval < 60 { // Less than 1 minute
+            return "Just now"
+        } else if absInterval < 3600 { // Less than 1 hour
+            let minutes = Int(absInterval / 60)
+            return "\(minutes)m ago"
+        } else if absInterval < 86400 { // Less than 1 day
+            let hours = Int(absInterval / 3600)
+            return "\(hours)h ago"
+        } else if absInterval < 604800 { // Less than 1 week
+            let days = Int(absInterval / 86400)
+            return "\(days)d ago"
+        } else if absInterval < 2592000 { // Less than 30 days
+            let weeks = Int(absInterval / 604800)
+            return "\(weeks)w ago"
+        } else {
+            let months = Int(absInterval / 2592000)
+            return "\(months)mo ago"
+        }
+    }
+}
 struct CompactBrowserOptionView: View {
     let browser: DetectedBrowser
     let isSelected: Bool
@@ -371,47 +769,7 @@ struct ProfileOptionView: View {
     }
 }
 
-struct BrowserProfile {
-    let name: String
-    let displayName: String
-    let path: String
-    let lastUsed: String?
-    
-    init(name: String, path: String, lastUsed: Date? = nil) {
-        self.name = name
-        self.path = path
-        self.lastUsed = lastUsed?.timeIntervalSinceNow.formatted()
-        
-        // Create display name
-        if name.lowercased() == "default" {
-            self.displayName = "Default Profile"
-        } else if name.lowercased().contains("person") {
-            self.displayName = name.replacingOccurrences(of: "Person ", with: "Profile ")
-        } else {
-            self.displayName = name
-        }
-    }
-}
 
-extension TimeInterval {
-    func formatted() -> String {
-        let absInterval = abs(self)
-        
-        if absInterval < 3600 { // Less than 1 hour
-            let minutes = Int(absInterval / 60)
-            return "\(minutes)m ago"
-        } else if absInterval < 86400 { // Less than 1 day
-            let hours = Int(absInterval / 3600)
-            return "\(hours)h ago"
-        } else if absInterval < 604800 { // Less than 1 week
-            let days = Int(absInterval / 86400)
-            return "\(days)d ago"
-        } else {
-            let weeks = Int(absInterval / 604800)
-            return "\(weeks)w ago"
-        }
-    }
-}
 
 struct DetectedBrowser {
     let name: String
@@ -529,20 +887,6 @@ class BrowserDetector: ObservableObject {
         return profiles
     }
     
-    private func detectChromeProfiles(homeDir: String) -> [BrowserProfile] {
-        let chromeDir = "\(homeDir)/Library/Application Support/Google/Chrome"
-        return detectChromiumProfiles(baseDir: chromeDir)
-    }
-    
-    private func detectBraveProfiles(homeDir: String) -> [BrowserProfile] {
-        let braveDir = "\(homeDir)/Library/Application Support/BraveSoftware/Brave-Browser"
-        return detectChromiumProfiles(baseDir: braveDir)
-    }
-    
-    private func detectEdgeProfiles(homeDir: String) -> [BrowserProfile] {
-        let edgeDir = "\(homeDir)/Library/Application Support/Microsoft Edge"
-        return detectChromiumProfiles(baseDir: edgeDir)
-    }
     
     private func detectChromiumProfiles(baseDir: String) -> [BrowserProfile] {
         var profiles: [BrowserProfile] = []
@@ -568,48 +912,6 @@ class BrowserDetector: ObservableObject {
         return profiles.sorted { $0.name < $1.name }
     }
     
-    private func detectFirefoxProfiles(homeDir: String) -> [BrowserProfile] {
-        let firefoxDir = "\(homeDir)/Library/Application Support/Firefox/Profiles"
-        var profiles: [BrowserProfile] = []
-        let fileManager = FileManager.default
-        
-        do {
-            let contents = try fileManager.contentsOfDirectory(atPath: firefoxDir)
-            for item in contents {
-                let profilePath = "\(firefoxDir)/\(item)"
-                var isDirectory: ObjCBool = false
-                
-                if fileManager.fileExists(atPath: profilePath, isDirectory: &isDirectory) && isDirectory.boolValue {
-                    // Extract profile name from folder name (usually contains random string + profile name)
-                    let profileName = item.components(separatedBy: ".").last ?? item
-                    profiles.append(BrowserProfile(name: profileName, path: profilePath))
-                }
-            }
-        } catch {
-            print("Error reading Firefox profiles: \(error)")
-        }
-        
-        return profiles.sorted { $0.name < $1.name }
-    }
-    
-    private func detectArcProfiles(homeDir: String) -> [BrowserProfile] {
-        let arcDir = "\(homeDir)/Library/Application Support/Arc"
-        var profiles: [BrowserProfile] = []
-        let fileManager = FileManager.default
-        
-        // Arc uses a different structure - check for User Data directories
-        do {
-            let contents = try fileManager.contentsOfDirectory(atPath: arcDir)
-            for item in contents {
-                if item.hasPrefix("User Data") {
-                    let profilePath = "\(arcDir)/\(item)"
-                    profiles.append(BrowserProfile(name: item, path: profilePath))
-                }
-            }
-        } catch {
-            print("Error reading Arc profiles: \(error)")
-        }
-        
-        return profiles.sorted { $0.name < $1.name }
-    }
+
+
 }

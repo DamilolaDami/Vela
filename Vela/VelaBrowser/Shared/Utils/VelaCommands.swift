@@ -96,7 +96,7 @@ struct VelaCommands: Commands {
             .keyboardShortcut(",", modifiers: [.command])
             if let url = browserViewModel.currentTab?.url{
                 Button("Settings for \(url.host() ?? "")...") {
-                   
+                    appDelegate.browserViewModel?.showSettings = true
                 }
             }
             Button("Import from Another Browser...") {

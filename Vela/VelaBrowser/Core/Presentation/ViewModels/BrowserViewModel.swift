@@ -36,6 +36,7 @@ class BrowserViewModel: ObservableObject {
     @Published var downloadsManager: DownloadsManager?
     @Published var siteSettingsViewModel: SiteSettingsViewModel
     @Published var isShowingImportFromOtherBrowserSheet: Bool = false
+    @Published var showSettings = false
     private var observers: [NSObjectProtocol] = []
      
     private var popupWindows: [WKWebView: NSWindow] = [:]
