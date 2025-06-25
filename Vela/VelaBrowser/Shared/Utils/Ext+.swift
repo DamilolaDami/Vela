@@ -19,6 +19,7 @@ extension Color {
     static let tabHoverBackground = Color(NSColor.controlAccentColor).opacity(0.1)
     static let tabBorder = Color(NSColor.separatorColor)
     static let tabSelectedBorder = Color(NSColor.keyboardFocusIndicatorColor)
+    
     static func spaceColor(_ spaceColor: Space.SpaceColor) -> Color {
         switch spaceColor {
         case .blue: return .blue
@@ -29,7 +30,58 @@ extension Color {
         case .yellow: return .yellow
         case .green: return .green
         case .gray: return .gray
+        case .custom: return .blue // Fallback, should use Space.displayColor instead
         }
+    }
+    
+    init?(hex: String) {
+        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
+        
+        var rgb: UInt64 = 0
+        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else {
+            return nil
+        }
+        
+        let red = Double((rgb & 0xFF0000) >> 16) / 255.0
+        let green = Double((rgb & 0x00FF00) >> 8) / 255.0
+        let blue = Double(rgb & 0x0000FF) / 255.0
+        
+        self.init(red: red, green: green, blue: blue)
+    }
+    
+    func toHexString() -> String {
+        let nsColor = NSColor(self)
+        guard let components = nsColor.cgColor.components, components.count >= 3 else {
+            return "#000000"
+        }
+        let r = Int(components[0] * 255)
+        let g = Int(components[1] * 255)
+        let b = Int(components[2] * 255)
+        return String(format: "#%02X%02X%02X", r, g, b)
+    }
+    
+    func toSpaceColor() -> Space.SpaceColor {
+        let nsColor = NSColor(self)
+        guard let components = nsColor.cgColor.components, components.count >= 3 else {
+            return .gray
+        }
+        
+        let r = components[0], g = components[1], b = components[2]
+        
+        // Check if it matches any predefined colors (with some tolerance)
+        let predefinedColors: [(Space.SpaceColor, Color)] = [
+            (.blue, .blue), (.purple, .purple), (.pink, .pink), (.red, .red),
+            (.orange, .orange), (.yellow, .yellow), (.green, .green), (.gray, .gray)
+        ]
+        
+        for (spaceColor, color) in predefinedColors {
+            if self.isApproximatelyEqual(to: color, tolerance: 0.2) {
+                return spaceColor
+            }
+        }
+        
+        return .custom // It's a custom color
     }
 }
 
@@ -39,7 +91,6 @@ extension Space.SpaceColor {
     }
 }
 
-
 extension View {
     func progressTransition() -> some View {
         self.transition(.asymmetric(
@@ -48,7 +99,7 @@ extension View {
         ))
     }
         func withNotificationBanners() -> some View {
-            ZStack(alignment: .top) {
+            ZStack(alignment: .topTrailing) {
                 self
                 NotificationBannerContainer()
             }
@@ -277,4 +328,10 @@ extension URL {
         // Return the host component, which gives us the base domain (e.g., "github.com")
         return host
     }
+}
+
+
+extension Notification.Name {
+    static let downloadStarted = Notification.Name("downloadStarted")
+    static let downloadItemAdded = Notification.Name("downloadItemAdded")
 }

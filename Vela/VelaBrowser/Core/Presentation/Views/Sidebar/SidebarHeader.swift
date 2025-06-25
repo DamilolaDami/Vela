@@ -12,6 +12,7 @@ import SwiftUI
 // MARK: - Main SidebarHeader View
 struct SidebarHeader: View {
     @ObservedObject var viewModel: BrowserViewModel
+    @ObservedObject var bookmarkViewModel: BookmarkViewModel
     @State private var showDownloads = false
     @State private var showSettings = false
     
@@ -23,6 +24,7 @@ struct SidebarHeader: View {
                 // Bottom row - Action buttons
                 ActionButtonsRow(
                     viewModel: viewModel,
+                    bookmarkViewModel: bookmarkViewModel,
                     showDownloads: $showDownloads,
                     showSettings: $showSettings
                 )
@@ -33,7 +35,7 @@ struct SidebarHeader: View {
             // Enhanced separator
             SeparatorView()
         }
-        .background(.regularMaterial)
+        //.background(.regularMaterial)
     }
 }
 
@@ -58,31 +60,87 @@ struct KeyboardShortcutHint: View {
 // MARK: - Action Buttons Row Sub-View
 struct ActionButtonsRow: View {
     @ObservedObject var viewModel: BrowserViewModel
+    @ObservedObject var bookmarkViewModel: BookmarkViewModel
     @Binding var showDownloads: Bool
     @Binding var showSettings: Bool
     
     var body: some View {
         HStack(spacing: 4) {
-            // Incognito mode toggle
-            IncognitoToggleButton(viewModel: viewModel)
             
-            Spacer()
-            
-            // Downloads button
-            DownloadsButton(
-                viewModel: viewModel,
-                showDownloads: $showDownloads
-            )
-            
-            // Settings button
-            
-            if viewModel.currentTab?.url != nil {
-                SettingsButton(showSettings: $showSettings, viewModel: viewModel)
+            ActionButton(
+                icon: "sidebar.left",
+                tooltip: "Close sidebar"            ) {
+                viewModel.toggleSidebar()
             }
-            
+
+            Spacer()
+            HStack {
+                ActionButton(
+                    icon: "arrow.left",
+                    tooltip: "Go back",
+                    isDisabled: !canGoBack
+                ) {
+                    goBack()
+                }
+              //  .disabled(!canGoBack)
+            }
+            ActionButton(
+                icon: "arrow.right",
+                tooltip: "Go Forward",
+                isDisabled: !canGoForward
+            ) {
+                goForward()
+            }
+            ActionButton(
+                icon: viewModel.isLoading ? "xmark" : "arrow.clockwise",
+                tooltip: "Reload this tab"
+            ) {
+                refresh()
+            }
            
         }
-        .animation(.spring, value: viewModel.currentTab?.url != nil)
+           
+            
+    }
+    
+    private var canGoBack: Bool {
+        viewModel.currentTab?.canGoBack ?? false
+    }
+   
+    
+    private var canGoForward: Bool {
+        viewModel.currentTab?.canGoForward ?? false
+    }
+    
+    private var isBookmarked: Bool {
+        guard let url = viewModel.currentTab?.url else { return false }
+        return bookmarkViewModel.bookmarks.contains { bookmark in
+            bookmark.url?.absoluteString == url.absoluteString
+        }
+    }
+    
+    private var hasURL: Bool {
+        viewModel.currentTab?.url != nil
+    }
+    
+    // MARK: - Actions
+    
+    func goBack() {
+        print("Attempting to go back. Can go back: \(viewModel.currentTab?.webView?.canGoBack ?? false)")
+        viewModel.currentTab?.webView?.goBack()
+    }
+
+    func goForward() {
+        print("Attempting to go forward. Can go forward: \(viewModel.currentTab?.webView?.canGoForward ?? false)")
+        viewModel.currentTab?.webView?.goForward()
+    }
+    
+    private func refresh() {
+        if viewModel.isLoading {
+            viewModel.stopLoading()
+        } else {
+            viewModel.reload()
+        }
     }
 }
 
@@ -119,28 +177,14 @@ struct DownloadsButton: View {
             showDownloads.toggle()
         }
         .popover(isPresented: $showDownloads, arrowEdge: .bottom) {
-            DownloadsView(viewModel: viewModel)
+            if let downloadsManager = viewModel.downloadsManager {
+                DownloadsView(
+                    viewModel: viewModel, downloadsManager: downloadsManager)
+            }
         }
     }
 }
 
-// MARK: - Settings Button Sub-View
-struct SettingsButton: View {
-    @Binding var showSettings: Bool
-    var viewModel: BrowserViewModel
-    
-    var body: some View {
-        ActionButton(
-            icon: "gearshape.fill",
-            tooltip: "Settings"
-        ) {
-            showSettings.toggle()
-        }
-        .popover(isPresented: $showSettings, arrowEdge: .bottom) {
-            SettingsView(viewModel: viewModel)
-        }
-    }
-}
 
 
 // MARK: - Separator Sub-View

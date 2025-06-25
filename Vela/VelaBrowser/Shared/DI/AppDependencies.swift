@@ -32,12 +32,16 @@ protocol AppDependenciesProtocol {
     func makeBookmarkViewModel() -> BookmarkViewModel
   //  func makeDownloadViewModel() -> DownloadViewModel
     func makeVelaPilotViewModel() -> VelaPilotViewModel
-    func makeSuggestionViewModel() -> SuggestionViewModel
+    func makeSuggestionViewModel() -> AddressBarViewModel
 }
 
 // MARK: - AppDependencies Implementation
 @MainActor
 class AppDependencies: ObservableObject, @preconcurrency AppDependenciesProtocol {
+    func makeSuggestionViewModel() -> AddressBarViewModel {
+        AddressBarViewModel.shared
+    }
+    
     
     // MARK: - Singleton Instance
     static let shared = AppDependencies()
@@ -153,8 +157,8 @@ class AppDependencies: ObservableObject, @preconcurrency AppDependenciesProtocol
     func makeNoteBoardViewModel() -> NoteBoardViewModel {
         return viewModelFactory.makeNoteBoardViewMode()
     }
-    func makeSuggestionViewModel() -> SuggestionViewModel {
-        return viewModelFactory.makeSuggestionViewModel()
+    func makeaddressBarViewModel() -> AddressBarViewModel {
+        return viewModelFactory.makeaddressBarViewModel()
     }
     
     // MARK: - Shared ViewModels Access
@@ -252,7 +256,7 @@ extension AppDependencies {
     
     // MARK: - Window Management
     func createNewWindow(with url: URL? = nil) {
-        browserViewModel.createNewWindow(with: url)
+        //browserViewModel.createNewWindow(with: url)
     }
     
     // MARK: - Debug Helpers

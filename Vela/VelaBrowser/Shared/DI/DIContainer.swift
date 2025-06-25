@@ -13,6 +13,10 @@ class DIContainer: ObservableObject {
         return SpaceRepository(context:PersistenceController.shared.context.mainContext)
     }
     @MainActor
+    func makeSpaceRepository() -> FolderRepositoryProtocol{
+        return FolderRepository(context: PersistenceController.shared.context.mainContext)
+    }
+    @MainActor
     func makeNoteBoardRepository() -> NoteBoardRepositoryProtocol {
         return NoteBoardRepository(context:PersistenceController.shared.context.mainContext)
     }
@@ -40,13 +44,15 @@ class DIContainer: ObservableObject {
   
     
     @MainActor
-    func makeBrowserViewModel(with noteBoardViewModel: NoteBoardViewModel, with suggestionViewModel: SuggestionViewModel) -> BrowserViewModel {
+    func makeBrowserViewModel(with noteBoardViewModel: NoteBoardViewModel, with suggestionViewModel: AddressBarViewModel, with schemeDetection: SchemaDetectionService) -> BrowserViewModel {
         return BrowserViewModel(
             createTabUseCase: makeCreateTabUseCase(),
             tabRepository: makeTabRepository(),
             spaceRepository: makeSpaceRepository(),
+            folderRepository: makeSpaceRepository(),
             noteboardVM: noteBoardViewModel,
-            suggestionVM: suggestionViewModel
+            addressBarVM: suggestionViewModel,
+            detectedSechema: schemeDetection
             
         )
     }
@@ -62,8 +68,13 @@ class DIContainer: ObservableObject {
     }
     
     @MainActor
-    func makeSuggestionViewModel() -> SuggestionViewModel {
-        return SuggestionViewModel()
+    func makeAddressBarViewModel() -> AddressBarViewModel {
+        return AddressBarViewModel.shared
+    }
+    
+    @MainActor
+    func makeSchemaDetector() -> SchemaDetectionService {
+        return SchemaDetectionService()
     }
     
     

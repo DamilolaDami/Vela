@@ -4,57 +4,90 @@ struct SidebarView: View {
     @ObservedObject var viewModel: BrowserViewModel
     @ObservedObject var previewManager: TabPreviewManager
     @ObservedObject var boardVM: NoteBoardViewModel
+    @ObservedObject var bookMarkViewModel: BookmarkViewModel
+    @ObservedObject var suggestionViewModel: AddressBarViewModel
+    
     @State private var hoveredTab: UUID?
+    @State private var draggedTab: Tab? = nil
+    @State private var isDragging: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with space selector
-            SidebarHeader(viewModel: viewModel)
-            
-            ScrollView {
-                VStack(spacing: 24) {
-                    QuickAccessGrid(viewModel: viewModel)
-                    NoteBoardSection(boardVM: boardVM, viewModel: viewModel, onBoardSelected: {
-                        viewModel.currentSpace = nil
-                    })
-                    TabsSection(
-                        viewModel: viewModel, previewManager: previewManager,
-                        hoveredTab: $hoveredTab
+            SidebarHeader(viewModel: viewModel, bookmarkViewModel: bookMarkViewModel)
+            BrowserToolbar(
+                viewModel: viewModel,
+                bookmarkViewModel: bookMarkViewModel,
+                suggestionVM: suggestionViewModel
+            )
+            //.padding(.bottom)
+            .padding(.top, 3)
+            .padding(.horizontal, 10)
+            QuickAccessGrid(viewModel: viewModel)
+                .padding(.bottom)
+                .padding(.top, 6)
+                .padding(.horizontal, 13)
+            List {
+                // Quick Access Section
+               
+                // Note Board Section (commented out)
+//                Section {
+//                    NoteBoardSection(
+//                        boardVM: boardVM,
+//                        viewModel: viewModel,
+//                        onBoardModeSelected: {
+//                            viewModel.currentSpace = nil
+//                        }
+//                    )
+//                    .listRowInsets(EdgeInsets())
+//                    .listRowSeparator(.hidden)
+//                    .listRowBackground(Color.clear)
+//                }
+                
+                // Folder Section
+                Section {
+                    FolderSection(
+                        viewModel: viewModel,
+                        previewManager: previewManager,
+                        hoveredTab: $hoveredTab,
+                        draggedTab: $draggedTab,
+                        isDragging: $isDragging
                     )
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
+                
+                // Tabs Section
+                Section {
+                    TabsSection(
+                        viewModel: viewModel,
+                        previewManager: previewManager,
+                        hoveredTab: $hoveredTab,
+                        draggedTab: $draggedTab,
+                        isDragging: $isDragging
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .padding(.vertical)
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .padding(.horizontal, 10)
+            .padding(.top, 5)
             
             BottomActions(viewModel: viewModel)
         }
-      
-        .background(
-            LinearGradient(
-                stops: [
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.4), location: 0.0),
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.2), location: 0.3),
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.2), location: 0.7),
-                    Gradient.Stop(color: currentSpaceColor.opacity(0.1), location: 1.0),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .overlay(
-            // Colored border instead of gray
-            Rectangle()
-                .fill(currentSpaceColor.opacity(0.15))
-                .frame(width: 1)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        )
         .sheet(isPresented: $viewModel.isShowingCreateSpaceSheet) {
             SpaceCreationSheet(viewModel: viewModel)
         }
     }
     
     private var currentSpaceColor: Color {
-        guard let space = viewModel.currentSpace else { return .blue }
-        return Color.spaceColor(space.color)
+        guard let space = viewModel.currentSpace else { return Color.blue }
+        return space.displayColor
     }
 }

@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 protocol CreateTabUseCaseProtocol {
-    func execute(url: URL?, in spaceId: UUID?) -> AnyPublisher<Tab, Error>
+    func execute(url: URL?, in spaceId: UUID?, folderId: UUID?) -> AnyPublisher<Tab, Error>
 }
 
 class CreateTabUseCase: CreateTabUseCaseProtocol {
@@ -14,7 +14,7 @@ class CreateTabUseCase: CreateTabUseCaseProtocol {
         self.spaceRepository = spaceRepository
     }
     
-    func execute(url: URL?, in spaceId: UUID?) -> AnyPublisher<Tab, Error> {
+    func execute(url: URL?, in spaceId: UUID?, folderId: UUID?) -> AnyPublisher<Tab, Error> {
         // If no spaceId is provided, fetch the default space's ID
         let spaceIdPublisher: AnyPublisher<UUID?, Error> = spaceId != nil ?
             Just(spaceId).setFailureType(to: Error.self).eraseToAnyPublisher() :
@@ -35,7 +35,9 @@ class CreateTabUseCase: CreateTabUseCaseProtocol {
                     url: url,
                     spaceId: resolvedSpaceId,
                     createdAt: Date(),
-                    lastAccessedAt: Date()
+                    lastAccessedAt: Date(),
+                    folderId: folderId
+                    
                 )
                 
                 return self.tabRepository.create(tab: newTab)

@@ -9,7 +9,7 @@
 import SwiftUI
 
 struct SuggestionsListView: View {
-    @ObservedObject var suggestionViewModel: SuggestionViewModel
+    @ObservedObject var suggestionViewModel: AddressBarViewModel
     let onSuggestionSelected: (String) -> Void
     let onEditingChanged: (Bool) -> Void
     
